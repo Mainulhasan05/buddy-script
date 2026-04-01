@@ -2,8 +2,7 @@ const { Router } = require('express');
 
 const router = Router();
 
-// Routes will be mounted here as they are implemented
-// router.use('/auth', require('./auth.routes'));
+router.use('/auth', require('./auth.routes'));
 // router.use('/posts', require('./post.routes'));
 // router.use('/comments', require('./comment.routes'));
 // router.use('/likes', require('./like.routes'));
