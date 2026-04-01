@@ -3,6 +3,8 @@ const app = require('./src/app');
 const connectDB = require('./src/config/db');
 const { connectRedis } = require('./src/config/redis');
 const { connectRabbitMQ } = require('./src/config/rabbitmq');
+const { startLikeWorker } = require('./src/workers/like.worker');
+const { startNotificationWorker } = require('./src/workers/notification.worker');
 const env = require('./src/config/env');
 const logger = require('./src/utils/logger');
 
@@ -14,6 +16,10 @@ const startServer = async () => {
     await connectDB();
     await connectRedis();
     await connectRabbitMQ();
+
+    // Start async workers after all connections are established
+    startLikeWorker();
+    startNotificationWorker();
 
     app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT} [${env.NODE_ENV}]`);
