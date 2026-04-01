@@ -1,4 +1,4 @@
-./social-media-frontend/node_modules
-./social-media-backend/node_modules
+social-media-frontend/node_modules/
+social-media-backend/node_modules/
 
-# hide the env
+node_modules/
