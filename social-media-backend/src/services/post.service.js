@@ -86,15 +86,32 @@ const getFeed = async ({ cursor, limit = 20 }) => {
 
 /**
  * Get a single post by ID (cache-first).
+ * Private posts are only visible to their author.
  */
-const getPost = async (postId) => {
+const getPost = async (postId, requesterId) => {
   const cacheKey = CACHE_KEYS.POST(postId);
 
   const cached = await cacheService.get(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    if (cached.visibility === 'private' && cached.author._id.toString() !== requesterId) {
+      const err = new Error('Post not found');
+      err.statusCode = 404;
+      err.code = 'POST_NOT_FOUND';
+      throw err;
+    }
+    return cached;
+  }
 
   const post = await Post.findOne({ _id: postId, isDeleted: false }).lean();
   if (!post) {
+    const err = new Error('Post not found');
+    err.statusCode = 404;
+    err.code = 'POST_NOT_FOUND';
+    throw err;
+  }
+
+  // Enforce private visibility — only the author can see their own private posts
+  if (post.visibility === 'private' && post.author._id.toString() !== requesterId) {
     const err = new Error('Post not found');
     err.statusCode = 404;
     err.code = 'POST_NOT_FOUND';

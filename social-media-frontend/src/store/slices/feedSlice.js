@@ -1,6 +1,32 @@
 'use client';
 
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { postApi } from '@/src/api/post.api';
+
+// ─── Async Thunks ────────────────────────────────────────────────────────────
+
+export const fetchFeed = createAsyncThunk('feed/fetchFeed', async (_, { rejectWithValue }) => {
+  try {
+    const { data } = await postApi.getFeed();
+    return { posts: data.data, pagination: data.pagination };
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || 'Failed to load feed');
+  }
+});
+
+export const fetchNextPage = createAsyncThunk(
+  'feed/fetchNextPage',
+  async (cursor, { rejectWithValue }) => {
+    try {
+      const { data } = await postApi.getFeed(cursor);
+      return { posts: data.data, pagination: data.pagination };
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Failed to load more posts');
+    }
+  }
+);
+
+// ─── Slice ────────────────────────────────────────────────────────────────────
 
 const initialState = {
   posts: [],
@@ -8,31 +34,15 @@ const initialState = {
   hasMore: true,
   loading: false,
   creating: false,
+  error: null,
 };
 
 const feedSlice = createSlice({
   name: 'feed',
   initialState,
   reducers: {
-    setLoading(state, action) {
-      state.loading = action.payload;
-    },
     setCreating(state, action) {
       state.creating = action.payload;
-    },
-    setPosts(state, action) {
-      const { posts, nextCursor, hasMore } = action.payload;
-      state.posts = posts;
-      state.nextCursor = nextCursor;
-      state.hasMore = hasMore;
-      state.loading = false;
-    },
-    appendPosts(state, action) {
-      const { posts, nextCursor, hasMore } = action.payload;
-      state.posts.push(...posts);
-      state.nextCursor = nextCursor;
-      state.hasMore = hasMore;
-      state.loading = false;
     },
     prependPost(state, action) {
       state.posts.unshift(action.payload);
@@ -51,15 +61,47 @@ const feedSlice = createSlice({
       state.nextCursor = null;
       state.hasMore = true;
       state.loading = false;
+      state.error = null;
     },
+  },
+  extraReducers: (builder) => {
+    builder
+      // fetchFeed
+      .addCase(fetchFeed.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchFeed.fulfilled, (state, action) => {
+        const { posts, pagination } = action.payload;
+        state.posts = posts;
+        state.nextCursor = pagination?.nextCursor ?? null;
+        state.hasMore = pagination?.hasMore ?? false;
+        state.loading = false;
+      })
+      .addCase(fetchFeed.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // fetchNextPage
+      .addCase(fetchNextPage.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchNextPage.fulfilled, (state, action) => {
+        const { posts, pagination } = action.payload;
+        state.posts.push(...posts);
+        state.nextCursor = pagination?.nextCursor ?? null;
+        state.hasMore = pagination?.hasMore ?? false;
+        state.loading = false;
+      })
+      .addCase(fetchNextPage.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      });
   },
 });
 
 export const {
-  setLoading,
   setCreating,
-  setPosts,
-  appendPosts,
   prependPost,
   removePost,
   updatePostLikeCount,

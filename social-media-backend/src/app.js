@@ -5,6 +5,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
 
 const env = require('./config/env');
 const logger = require('./utils/logger');
@@ -49,6 +50,14 @@ app.use('/api', globalLimiter);
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
+
+// Sanitize request data — strips keys starting with '$' or containing '.' to prevent NoSQL injection
+app.use(mongoSanitize());
+
+// Health check — must be before API routes so it bypasses auth and rate limiting
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
 
 // API routes
 app.use('/api', routes);

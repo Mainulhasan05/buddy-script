@@ -30,7 +30,7 @@ const getFeed = async (req, res, next) => {
 
 const getPost = async (req, res, next) => {
   try {
-    const post = await postService.getPost(req.params.postId);
+    const post = await postService.getPost(req.params.postId, req.user.id);
     sendSuccess(res, 'Post fetched', post);
   } catch (err) {
     next(err);
