@@ -4,7 +4,6 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
-const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 
 const env = require('./config/env');
@@ -56,14 +55,14 @@ if (env.NODE_ENV !== 'test') {
   );
 }
 
+const createLimiter = require('./utils/rate-limiter.util');
+
 // ── Global Rate Limit ─────────────────────────────────────────────────────────
 // 300 requests / 15 min per IP — covers normal browsing patterns at scale.
 // Per-action limits (auth, posts, comments, likes) are applied at the route level.
-const globalLimiter = rateLimit({
+const globalLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
   max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { success: false, message: 'Too many requests, please try again later.', code: 'RATE_LIMITED' },
 });
 app.use('/api', globalLimiter);
