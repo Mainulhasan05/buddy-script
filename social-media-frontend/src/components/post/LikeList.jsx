@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { closeLikeListModal } from '@/src/store/slices/uiSlice';
+import { closeLikeListModal, showToast } from '@/src/store/slices/uiSlice';
 import { likeApi } from '@/src/api/like.api';
 
 export default function LikeList() {
@@ -29,8 +29,13 @@ export default function LikeList() {
       setLikers((prev) => (cursor ? [...prev, ...data.data] : data.data));
       setNextCursor(data.pagination?.nextCursor ?? null);
       setHasMore(data.pagination?.hasMore ?? false);
-    } catch {
-      // silently fail
+    } catch (err) {
+      dispatch(
+        showToast({
+          message: err.response?.data?.message || 'Failed to fetch likes list',
+          type: 'error',
+        })
+      );
     } finally {
       setLoading(false);
     }

@@ -9,11 +9,7 @@ const initialState = {
     targetId: null,
     targetType: null,
   },
-  toast: {
-    message: '',
-    type: 'info', // 'info' | 'success' | 'error'
-    visible: false,
-  },
+  toasts: [],
   darkMode: false,
 };
 
@@ -35,14 +31,22 @@ const uiSlice = createSlice({
       state.likeListModal = { open: false, targetId: null, targetType: null };
     },
     showToast(state, action) {
-      const { message, type = 'info' } = action.payload;
-      state.toast = { message, type, visible: true };
+      const { message, type = 'info', duration = 3000 } = action.payload;
+      state.toasts.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        message,
+        type,
+        duration,
+      });
     },
-    hideToast(state) {
-      state.toast.visible = false;
+    hideToast(state, action) {
+      state.toasts = state.toasts.filter((toast) => toast.id !== action.payload);
     },
     toggleDarkMode(state) {
       state.darkMode = !state.darkMode;
+    },
+    setDarkMode(state, action) {
+      state.darkMode = action.payload;
     },
   },
 });
@@ -55,6 +59,7 @@ export const {
   showToast,
   hideToast,
   toggleDarkMode,
+  setDarkMode,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

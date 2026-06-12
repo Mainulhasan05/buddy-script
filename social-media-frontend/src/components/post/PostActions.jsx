@@ -46,7 +46,7 @@ export default function PostActions({ post }) {
         <LikeButton
           targetId={post._id}
           targetType="post"
-          initialLiked={false}
+          initialLiked={post.isLiked || false}
           initialCount={post.likeCount}
         />
 

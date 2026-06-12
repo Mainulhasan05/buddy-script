@@ -21,7 +21,7 @@ const createPost = async (req, res, next) => {
 const getFeed = async (req, res, next) => {
   try {
     const { cursor, limit } = req.query;
-    const result = await postService.getFeed({ cursor, limit });
+    const result = await postService.getFeed({ cursor, limit, userId: req.user?.id });
     sendSuccess(res, 'Feed fetched', result.posts, 200, result.pagination);
   } catch (err) {
     next(err);

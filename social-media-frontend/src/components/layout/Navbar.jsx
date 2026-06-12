@@ -7,18 +7,29 @@ import Link from 'next/link';
 import { logout } from '@/src/store/slices/authSlice';
 import { resetFeed } from '@/src/store/slices/feedSlice';
 import { authApi } from '@/src/api/auth.api';
+import Button from '@/src/components/ui/Button';
 
 export default function Navbar() {
   const dispatch = useDispatch();
   const router = useRouter();
   const user = useSelector((s) => s.auth.user);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    try { await authApi.logout(); } catch { /* ignore */ }
-    dispatch(logout());
-    dispatch(resetFeed());
-    router.push('/login');
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setDropdownOpen(false);
+    try {
+      await authApi.logout();
+    } catch {
+      // Logout remains a local success even if the best-effort server cleanup fails.
+    } finally {
+      dispatch(logout());
+      dispatch(resetFeed());
+      setLoggingOut(false);
+      router.push('/login');
+    }
   };
 
   return (
@@ -97,11 +108,14 @@ export default function Navbar() {
                 <hr />
                 <ul className="_nav_dropdown_list">
                   <li className="_nav_dropdown_list_item">
-                    <button
+                    <Button
                       type="button"
                       className="_nav_dropdown_link"
                       onClick={handleLogout}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center' }}
+                      variant="ghost"
+                      loading={loggingOut}
+                      loadingLabel="Logging out..."
+                      style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', minWidth: 0, padding: 0 }}
                     >
                       <div className="_nav_drop_info">
                         <span>
@@ -111,7 +125,7 @@ export default function Navbar() {
                         </span>
                         Log Out
                       </div>
-                    </button>
+                    </Button>
                   </li>
                 </ul>
               </div>

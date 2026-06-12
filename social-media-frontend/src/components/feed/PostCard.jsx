@@ -6,6 +6,7 @@ import { formatRelative } from 'date-fns';
 import { removePost } from '@/src/store/slices/feedSlice';
 import { postApi } from '@/src/api/post.api';
 import PostActions from '@/src/components/post/PostActions';
+import { showToast } from '@/src/store/slices/uiSlice';
 
 export default function PostCard({ post }) {
   const dispatch = useDispatch();
@@ -19,7 +20,15 @@ export default function PostCard({ post }) {
     try {
       await postApi.deletePost(post._id);
       dispatch(removePost(post._id));
-    } catch { /* silent */ }
+      dispatch(showToast({ message: 'Post deleted successfully', type: 'success' }));
+    } catch (err) {
+      dispatch(
+        showToast({
+          message: err.response?.data?.message || 'Failed to delete post',
+          type: 'error',
+        })
+      );
+    }
   };
 
   const relativeTime = (() => {

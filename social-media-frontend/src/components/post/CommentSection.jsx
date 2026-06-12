@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { commentApi } from '@/src/api/comment.api';
 import CommentItem from './CommentItem';
+import { incrementCommentCount } from '@/src/store/slices/feedSlice';
+import { showToast } from '@/src/store/slices/uiSlice';
 
 export default function CommentSection({ postId }) {
+  const dispatch = useDispatch();
   const user = useSelector((s) => s.auth.user);
 
   const [comments, setComments] = useState([]);
@@ -30,7 +33,11 @@ export default function CommentSection({ postId }) {
       setNextCursor(data.pagination?.nextCursor ?? null);
       setHasMore(data.pagination?.hasMore ?? false);
       setLoaded(true);
-    } catch { /* silent */ } finally { setLoading(false); }
+    } catch (err) {
+      dispatch(showToast({ message: err.response?.data?.message || 'Failed to load comments', type: 'error' }));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const submitComment = async (e) => {
@@ -40,8 +47,14 @@ export default function CommentSection({ postId }) {
     try {
       const { data } = await commentApi.addComment(postId, commentText.trim());
       setComments((prev) => [...prev, data.data]);
+      dispatch(incrementCommentCount(postId));
+      dispatch(showToast({ message: 'Comment added successfully', type: 'success' }));
       setCommentText('');
-    } catch { /* silent */ } finally { setSubmitting(false); }
+    } catch (err) {
+      dispatch(showToast({ message: err.response?.data?.message || 'Failed to add comment', type: 'error' }));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

@@ -2,6 +2,8 @@
 
 import axios from 'axios';
 import { setAccessToken, logout } from '@/src/store/slices/authSlice';
+import { resetFeed } from '@/src/store/slices/feedSlice';
+import { normalizeApiError } from '@/src/utils/apiError';
 
 let store;
 
@@ -36,12 +38,27 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+const redirectToLogin = () => {
+  if (typeof window === 'undefined') return;
+  const current = `${window.location.pathname}${window.location.search}`;
+  const redirectTo = encodeURIComponent(current || '/feed');
+  window.location.href = `/login?reason=session-expired&redirectTo=${redirectTo}`;
+};
+
+const shouldAttemptRefresh = (error) => {
+  const url = error.config?.url || '';
+  if (!error.response || error.response.status !== 401) return false;
+  return !['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'].some((path) =>
+    url.includes(path)
+  );
+};
+
 axiosInstance.interceptors.response.use(
   (res) => res,
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (shouldAttemptRefresh(error) && !originalRequest?._retry) {
       if (isRefreshing) {
         // Queue the request until token refresh completes
         return new Promise((resolve, reject) => {
@@ -69,18 +86,16 @@ axiosInstance.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         store?.dispatch(logout());
+        store?.dispatch(resetFeed());
 
-        // Redirect to login (client-side only)
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
-        return Promise.reject(refreshError);
+        redirectToLogin();
+        return Promise.reject(normalizeApiError(refreshError));
       } finally {
         isRefreshing = false;
       }
     }
 
-    return Promise.reject(error);
+    return Promise.reject(normalizeApiError(error));
   }
 );
 

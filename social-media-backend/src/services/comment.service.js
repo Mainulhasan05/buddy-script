@@ -2,6 +2,7 @@ const Comment = require('../models/Comment.model');
 const Post = require('../models/Post.model');
 const User = require('../models/User.model');
 const cacheService = require('./cache.service');
+const likeService = require('./like.service');
 const { publish } = require('../config/rabbitmq');
 const { ROUTING_KEYS } = require('../constants/queue.constants');
 const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
@@ -109,38 +110,57 @@ const addReply = async ({ commentId, userId, content }) => {
 /**
  * Get top-level comments for a post (parentId=null), cursor-paginated, cache-first.
  */
-const getComments = async ({ postId, cursor, limit = 20 }) => {
+const getComments = async ({ postId, cursor, limit = 20, userId }) => {
   limit = Math.min(Number(limit), 50);
   const cacheKey = CACHE_KEYS.POST_COMMENTS(`${postId}:${cursor || 'first'}`);
 
   const cached = await cacheService.get(cacheKey);
-  if (cached) return cached;
+  let result;
+  if (cached) {
+    result = JSON.parse(JSON.stringify(cached));
+  } else {
+    const cursorQuery = buildCursorQuery(cursor);
 
-  const cursorQuery = buildCursorQuery(cursor);
+    const comments = await Comment.find({
+      ...cursorQuery,
+      postId,
+      parentId: null,
+      isDeleted: false,
+    })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(limit + 1)
+      .lean();
 
-  const comments = await Comment.find({
-    ...cursorQuery,
-    postId,
-    parentId: null,
-    isDeleted: false,
-  })
-    .sort({ createdAt: 1, _id: 1 })
-    .limit(limit + 1)
-    .lean();
+    const hasMore = comments.length > limit;
+    if (hasMore) comments.pop();
+    const nextCursor = hasMore ? encodeCursor(comments[comments.length - 1]) : null;
 
-  const hasMore = comments.length > limit;
-  if (hasMore) comments.pop();
-  const nextCursor = hasMore ? encodeCursor(comments[comments.length - 1]) : null;
+    result = { comments, pagination: { nextCursor, hasMore } };
+    await cacheService.set(cacheKey, result, CACHE_TTL.COMMENTS);
+  }
 
-  const result = { comments, pagination: { nextCursor, hasMore } };
-  await cacheService.set(cacheKey, result, CACHE_TTL.COMMENTS);
+  // Populate isLiked for comments
+  if (userId && result.comments.length > 0) {
+    const commentsWithLikes = await Promise.all(
+      result.comments.map(async (comment) => {
+        const isLiked = await likeService.getLikeState({
+          userId,
+          targetId: comment._id,
+          targetType: 'comment',
+        });
+        return { ...comment, isLiked };
+      })
+    );
+    result.comments = commentsWithLikes;
+  }
+
   return result;
 };
 
 /**
  * Get replies for a comment (parentId=commentId), cursor-paginated.
  */
-const getReplies = async ({ commentId, cursor, limit = 10 }) => {
+const getReplies = async ({ commentId, cursor, limit = 10, userId }) => {
   limit = Math.min(Number(limit), 50);
   const cursorQuery = buildCursorQuery(cursor);
 
@@ -157,7 +177,22 @@ const getReplies = async ({ commentId, cursor, limit = 10 }) => {
   if (hasMore) replies.pop();
   const nextCursor = hasMore ? encodeCursor(replies[replies.length - 1]) : null;
 
-  return { replies, pagination: { nextCursor, hasMore } };
+  // Populate isLiked for replies
+  let repliesWithLikes = replies;
+  if (userId && replies.length > 0) {
+    repliesWithLikes = await Promise.all(
+      replies.map(async (reply) => {
+        const isLiked = await likeService.getLikeState({
+          userId,
+          targetId: reply._id,
+          targetType: 'comment',
+        });
+        return { ...reply, isLiked };
+      })
+    );
+  }
+
+  return { replies: repliesWithLikes, pagination: { nextCursor, hasMore } };
 };
 
 module.exports = { addComment, addReply, getComments, getReplies };

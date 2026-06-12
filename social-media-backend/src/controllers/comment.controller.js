@@ -21,6 +21,7 @@ const getComments = async (req, res, next) => {
       postId: req.params.postId,
       cursor,
       limit,
+      userId: req.user?.id,
     });
     sendSuccess(res, 'Comments fetched', result.comments, 200, result.pagination);
   } catch (err) {
@@ -48,6 +49,7 @@ const getReplies = async (req, res, next) => {
       commentId: req.params.commentId,
       cursor,
       limit,
+      userId: req.user?.id,
     });
     sendSuccess(res, 'Replies fetched', result.replies, 200, result.pagination);
   } catch (err) {

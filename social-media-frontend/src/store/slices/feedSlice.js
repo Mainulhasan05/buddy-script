@@ -56,6 +56,10 @@ const feedSlice = createSlice({
       const post = state.posts.find((p) => p._id === postId);
       if (post) post.likeCount = likeCount;
     },
+    incrementCommentCount(state, action) {
+      const post = state.posts.find((p) => p._id === action.payload);
+      if (post) post.commentCount += 1;
+    },
     resetFeed(state) {
       state.posts = [];
       state.nextCursor = null;
@@ -105,6 +109,7 @@ export const {
   prependPost,
   removePost,
   updatePostLikeCount,
+  incrementCommentCount,
   resetFeed,
 } = feedSlice.actions;
 

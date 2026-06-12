@@ -2,6 +2,7 @@ const Post = require('../models/Post.model');
 const User = require('../models/User.model');
 const cacheService = require('./cache.service');
 const uploadService = require('./upload.service');
+const likeService = require('./like.service');
 const { publish } = require('../config/rabbitmq');
 const { ROUTING_KEYS } = require('../constants/queue.constants');
 const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
@@ -53,30 +54,49 @@ const createPost = async ({ userId, content, file, visibility = 'public' }) => {
 /**
  * Get paginated public feed (cache-first).
  */
-const getFeed = async ({ cursor, limit = 20 }) => {
+const getFeed = async ({ cursor, limit = 20, userId }) => {
   limit = Math.min(Number(limit), 50); // cap at 50
   const cacheKey = CACHE_KEYS.FEED(cursor);
 
   const cached = await cacheService.get(cacheKey);
-  if (cached) return cached;
+  let result;
+  if (cached) {
+    result = JSON.parse(JSON.stringify(cached));
+  } else {
+    const cursorQuery = buildCursorQuery(cursor);
+    const posts = await Post.find({
+      ...cursorQuery,
+      visibility: 'public',
+      isDeleted: false,
+    })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1)
+      .lean();
 
-  const cursorQuery = buildCursorQuery(cursor);
-  const posts = await Post.find({
-    ...cursorQuery,
-    visibility: 'public',
-    isDeleted: false,
-  })
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(limit + 1)
-    .lean();
+    const hasMore = posts.length > limit;
+    if (hasMore) posts.pop();
 
-  const hasMore = posts.length > limit;
-  if (hasMore) posts.pop();
+    const nextCursor = hasMore ? encodeCursor(posts[posts.length - 1]) : null;
+    result = { posts, pagination: { nextCursor, hasMore } };
 
-  const nextCursor = hasMore ? encodeCursor(posts[posts.length - 1]) : null;
-  const result = { posts, pagination: { nextCursor, hasMore } };
+    await cacheService.set(cacheKey, result, CACHE_TTL.FEED);
+  }
 
-  await cacheService.set(cacheKey, result, CACHE_TTL.FEED);
+  // Populate isLiked for this user
+  if (userId && result.posts.length > 0) {
+    const postsWithLikes = await Promise.all(
+      result.posts.map(async (post) => {
+        const isLiked = await likeService.getLikeState({
+          userId,
+          targetId: post._id,
+          targetType: 'post',
+        });
+        return { ...post, isLiked };
+      })
+    );
+    result.posts = postsWithLikes;
+  }
+
   return result;
 };
 
@@ -88,22 +108,18 @@ const getPost = async (postId, requesterId) => {
   const cacheKey = CACHE_KEYS.POST(postId);
 
   const cached = await cacheService.get(cacheKey);
+  let post;
   if (cached) {
-    if (cached.visibility === 'private' && cached.author._id.toString() !== requesterId) {
+    post = JSON.parse(JSON.stringify(cached));
+  } else {
+    post = await Post.findOne({ _id: postId, isDeleted: false }).lean();
+    if (!post) {
       const err = new Error('Post not found');
       err.statusCode = 404;
       err.code = 'POST_NOT_FOUND';
       throw err;
     }
-    return cached;
-  }
-
-  const post = await Post.findOne({ _id: postId, isDeleted: false }).lean();
-  if (!post) {
-    const err = new Error('Post not found');
-    err.statusCode = 404;
-    err.code = 'POST_NOT_FOUND';
-    throw err;
+    await cacheService.set(cacheKey, post, CACHE_TTL.POST);
   }
 
   // Enforce private visibility — only the author can see their own private posts
@@ -114,7 +130,15 @@ const getPost = async (postId, requesterId) => {
     throw err;
   }
 
-  await cacheService.set(cacheKey, post, CACHE_TTL.POST);
+  // Populate isLiked
+  if (requesterId) {
+    post.isLiked = await likeService.getLikeState({
+      userId: requesterId,
+      targetId: post._id,
+      targetType: 'post',
+    });
+  }
+
   return post;
 };
 
@@ -167,7 +191,19 @@ const getMyPosts = async ({ userId, cursor, limit = 20 }) => {
   if (hasMore) posts.pop();
   const nextCursor = hasMore ? encodeCursor(posts[posts.length - 1]) : null;
 
-  return { posts, pagination: { nextCursor, hasMore } };
+  // Populate isLiked for this user
+  const postsWithLikes = await Promise.all(
+    posts.map(async (post) => {
+      const isLiked = await likeService.getLikeState({
+        userId,
+        targetId: post._id,
+        targetType: 'post',
+      });
+      return { ...post, isLiked };
+    })
+  );
+
+  return { posts: postsWithLikes, pagination: { nextCursor, hasMore } };
 };
 
 module.exports = { createPost, getFeed, getPost, deletePost, getMyPosts };

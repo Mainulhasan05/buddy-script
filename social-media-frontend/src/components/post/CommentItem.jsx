@@ -1,10 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { commentApi } from '@/src/api/comment.api';
 import LikeButton from './LikeButton';
+import { showToast } from '@/src/store/slices/uiSlice';
 
 export default function CommentItem({ comment }) {
+  const dispatch = useDispatch();
   const [showReplies, setShowReplies] = useState(false);
   const [replies, setReplies] = useState([]);
   const [replyText, setReplyText] = useState('');
@@ -12,9 +15,13 @@ export default function CommentItem({ comment }) {
   const [repliesLoaded, setRepliesLoaded] = useState(false);
   const [repliesCursor, setRepliesCursor] = useState(null);
   const [repliesHasMore, setRepliesHasMore] = useState(false);
+  const [replyCount, setReplyCount] = useState(comment.replyCount || 0);
 
   const loadReplies = async () => {
-    if (repliesLoaded) { setShowReplies((v) => !v); return; }
+    if (repliesLoaded) {
+      setShowReplies((v) => !v);
+      return;
+    }
     try {
       const { data } = await commentApi.getReplies(comment._id);
       setReplies(data.data);
@@ -22,7 +29,30 @@ export default function CommentItem({ comment }) {
       setRepliesHasMore(data.pagination?.hasMore ?? false);
       setRepliesLoaded(true);
       setShowReplies(true);
-    } catch { /* silent */ }
+    } catch (err) {
+      dispatch(
+        showToast({
+          message: err.response?.data?.message || 'Failed to load replies',
+          type: 'error',
+        })
+      );
+    }
+  };
+
+  const loadMoreReplies = async () => {
+    try {
+      const { data } = await commentApi.getReplies(comment._id, repliesCursor);
+      setReplies((prev) => [...prev, ...data.data]);
+      setRepliesCursor(data.pagination?.nextCursor ?? null);
+      setRepliesHasMore(data.pagination?.hasMore ?? false);
+    } catch (err) {
+      dispatch(
+        showToast({
+          message: err.response?.data?.message || 'Failed to load more replies',
+          type: 'error',
+        })
+      );
+    }
   };
 
   const submitReply = async (e) => {
@@ -32,9 +62,20 @@ export default function CommentItem({ comment }) {
     try {
       const { data } = await commentApi.addReply(comment._id, replyText.trim());
       setReplies((prev) => [...prev, data.data]);
+      setReplyCount((c) => c + 1);
+      dispatch(showToast({ message: 'Reply posted successfully', type: 'success' }));
       setReplyText('');
       setShowReplies(true);
-    } catch { /* silent */ } finally { setReplyLoading(false); }
+    } catch (err) {
+      dispatch(
+        showToast({
+          message: err.response?.data?.message || 'Failed to post reply',
+          type: 'error',
+        })
+      );
+    } finally {
+      setReplyLoading(false);
+    }
   };
 
   return (
@@ -62,7 +103,7 @@ export default function CommentItem({ comment }) {
             <LikeButton
               targetId={comment._id}
               targetType="comment"
-              initialLiked={false}
+              initialLiked={comment.isLiked || false}
               initialCount={comment.likeCount || 0}
             />
             {comment.depth === 0 && (
@@ -71,8 +112,8 @@ export default function CommentItem({ comment }) {
                 onClick={loadReplies}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#666' }}
               >
-                {comment.replyCount > 0
-                  ? `${showReplies ? 'Hide' : 'View'} ${comment.replyCount} repl${comment.replyCount === 1 ? 'y' : 'ies'}`
+                {replyCount > 0
+                  ? `${showReplies ? 'Hide' : 'View'} ${replyCount} repl${replyCount === 1 ? 'y' : 'ies'}`
                   : 'Reply'}
               </button>
             )}
@@ -87,13 +128,8 @@ export default function CommentItem({ comment }) {
             {repliesHasMore && (
               <button
                 type="button"
-                onClick={async () => {
-                  const { data } = await commentApi.getReplies(comment._id, repliesCursor);
-                  setReplies((prev) => [...prev, ...data.data]);
-                  setRepliesCursor(data.pagination?.nextCursor ?? null);
-                  setRepliesHasMore(data.pagination?.hasMore ?? false);
-                }}
-                style={{ fontSize: 13, color: '#377DFF', background: 'none', border: 'none', cursor: 'pointer' }}
+                onClick={loadMoreReplies}
+                style={{ fontSize: 13, color: '#377DFF', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8 }}
               >
                 Load more replies
               </button>

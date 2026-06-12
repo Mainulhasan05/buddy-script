@@ -3,17 +3,25 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authApi } from '@/src/api/auth.api';
 import { setCredentials } from '@/src/store/slices/authSlice';
+import { showToast } from '@/src/store/slices/uiSlice';
+import Button from '@/src/components/ui/Button';
+import { getErrorMessage } from '@/src/utils/apiError';
 
 export default function LoginForm() {
   const dispatch = useDispatch();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const sessionExpired = searchParams.get('reason') === 'session-expired';
+  const redirectTo = searchParams.get('redirectTo') || '/feed';
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -28,9 +36,9 @@ export default function LoginForm() {
     try {
       const { data } = await authApi.login(form);
       dispatch(setCredentials({ user: data.data.user, accessToken: data.data.accessToken }));
-      router.push('/feed');
+      router.push(redirectTo.startsWith('/') ? redirectTo : '/feed');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      setError(getErrorMessage(err, "That email or password doesn't look right."));
     } finally {
       setLoading(false);
     }
@@ -71,11 +79,21 @@ export default function LoginForm() {
                 <p className="_social_login_content_para _mar_b8">Welcome back</p>
                 <h4 className="_social_login_content_title _titl4 _mar_b50">Login to your account</h4>
 
-                <button type="button" className="_social_login_content_btn _mar_b40">
+                <button
+                  type="button"
+                  className="_social_login_content_btn _mar_b40"
+                  onClick={() => dispatch(showToast({ message: 'Google Sign-In is not supported in this version. Please log in with your email.', type: 'info' }))}
+                >
                   <img src="/assets/images/google.svg" alt="Image" className="_google_img" /> <span>Or sign-in with google</span>
                 </button>
                 <div className="_social_login_content_bottom_txt _mar_b40"> <span>Or</span>
                 </div>
+
+                {sessionExpired && !error && (
+                  <div className="alert alert-info" role="status" style={{ marginBottom: '16px' }}>
+                    Your session has expired. Please log in again.
+                  </div>
+                )}
 
                 {error && (
                   <div className="alert alert-danger" role="alert" style={{ marginBottom: '16px' }}>
@@ -102,15 +120,35 @@ export default function LoginForm() {
                     <div className="col-xl-12">
                       <div className="_social_login_form_input _mar_b14">
                         <label className="_social_login_label _mar_b8">Password</label>
-                        <input
-                          type="password"
-                          name="password"
-                          value={form.password}
-                          onChange={handleChange}
-                          className="form-control _social_login_input"
-                          required
-                          autoComplete="current-password"
-                        />
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            name="password"
+                            value={form.password}
+                            onChange={handleChange}
+                            className="form-control _social_login_input"
+                            required
+                            autoComplete="current-password"
+                            style={{ paddingRight: 74 }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((value) => !value)}
+                            style={{
+                              position: 'absolute',
+                              right: 12,
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              border: 'none',
+                              background: 'transparent',
+                              color: '#377DFF',
+                              fontSize: 13,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {showPassword ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -132,7 +170,11 @@ export default function LoginForm() {
                     </div>
                     <div className="col-lg-6 col-xl-6 col-md-6 col-sm-12">
                       <div className="_social_login_form_left">
-                        <p className="_social_login_form_left_para" style={{ cursor: 'pointer' }}>
+                        <p
+                          className="_social_login_form_left_para"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => dispatch(showToast({ message: 'Password recovery is not supported in this version. Please use your registered credentials.', type: 'info' }))}
+                        >
                           Forgot password?
                         </p>
                       </div>
@@ -142,13 +184,15 @@ export default function LoginForm() {
                   <div className="row">
                     <div className="col-lg-12">
                       <div className="_social_login_form_btn _mar_t40 _mar_b60">
-                        <button
+                        <Button
                           type="submit"
                           className="_social_login_form_btn_link _btn1"
-                          disabled={loading}
+                          loading={loading}
+                          loadingLabel="Logging in..."
+                          style={{ width: '100%', padding: '13px 20px' }}
                         >
-                          {loading ? 'Logging in...' : 'Login now'}
-                        </button>
+                          Login now
+                        </Button>
                       </div>
                     </div>
                   </div>

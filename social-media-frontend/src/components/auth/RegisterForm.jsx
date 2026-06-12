@@ -3,13 +3,18 @@
 import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authApi } from '@/src/api/auth.api';
 import { setCredentials } from '@/src/store/slices/authSlice';
+import { showToast } from '@/src/store/slices/uiSlice';
+import Button from '@/src/components/ui/Button';
+import { getErrorMessage } from '@/src/utils/apiError';
 
 export default function RegisterForm() {
   const dispatch = useDispatch();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [form, setForm] = useState({
     firstName: '',
@@ -20,6 +25,9 @@ export default function RegisterForm() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const redirectTo = searchParams.get('redirectTo') || '/feed';
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -44,9 +52,9 @@ export default function RegisterForm() {
         password: form.password,
       });
       dispatch(setCredentials({ user: data.data.user, accessToken: data.data.accessToken }));
-      router.push('/feed');
+      router.push(redirectTo.startsWith('/') ? redirectTo : '/feed');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      setError(getErrorMessage(err, "We couldn't create your account. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -90,7 +98,11 @@ export default function RegisterForm() {
                 <p className="_social_registration_content_para _mar_b8">Get Started Now</p>
                 <h4 className="_social_registration_content_title _titl4 _mar_b50">Registration</h4>
 
-                <button type="button" className="_social_registration_content_btn _mar_b40">
+                <button
+                  type="button"
+                  className="_social_registration_content_btn _mar_b40"
+                  onClick={() => dispatch(showToast({ message: 'Google Registration is not supported in this version. Please register with your email.', type: 'info' }))}
+                >
                   <img src="/assets/images/google.svg" alt="Image" className="_google_img" /> <span>Register with google</span>
                 </button>
                 <div className="_social_registration_content_bottom_txt _mar_b40"> <span>Or</span>
@@ -151,30 +163,70 @@ export default function RegisterForm() {
                     <div className="col-xl-12">
                       <div className="_social_registration_form_input _mar_b14">
                         <label className="_social_registration_label _mar_b8">Password</label>
-                        <input
-                          type="password"
-                          name="password"
-                          value={form.password}
-                          onChange={handleChange}
-                          className="form-control _social_registration_input"
-                          required
-                          minLength={8}
-                          autoComplete="new-password"
-                        />
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            name="password"
+                            value={form.password}
+                            onChange={handleChange}
+                            className="form-control _social_registration_input"
+                            required
+                            minLength={8}
+                            autoComplete="new-password"
+                            style={{ paddingRight: 74 }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((value) => !value)}
+                            style={{
+                              position: 'absolute',
+                              right: 12,
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              border: 'none',
+                              background: 'transparent',
+                              color: '#377DFF',
+                              fontSize: 13,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {showPassword ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div className="col-xl-12">
                       <div className="_social_registration_form_input _mar_b14">
                         <label className="_social_registration_label _mar_b8">Repeat Password</label>
-                        <input
-                          type="password"
-                          name="confirmPassword"
-                          value={form.confirmPassword}
-                          onChange={handleChange}
-                          className="form-control _social_registration_input"
-                          required
-                          autoComplete="new-password"
-                        />
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            name="confirmPassword"
+                            value={form.confirmPassword}
+                            onChange={handleChange}
+                            className="form-control _social_registration_input"
+                            required
+                            autoComplete="new-password"
+                            style={{ paddingRight: 74 }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword((value) => !value)}
+                            style={{
+                              position: 'absolute',
+                              right: 12,
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              border: 'none',
+                              background: 'transparent',
+                              color: '#377DFF',
+                              fontSize: 13,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {showConfirmPassword ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -199,13 +251,15 @@ export default function RegisterForm() {
                   <div className="row">
                     <div className="col-lg-12">
                       <div className="_social_registration_form_btn _mar_t40 _mar_b60">
-                        <button
+                        <Button
                           type="submit"
                           className="_social_registration_form_btn_link _btn1"
-                          disabled={loading}
+                          loading={loading}
+                          loadingLabel="Creating account..."
+                          style={{ width: '100%', padding: '13px 20px' }}
                         >
-                          {loading ? 'Creating account...' : 'Register now'}
-                        </button>
+                          Register now
+                        </Button>
                       </div>
                     </div>
                   </div>

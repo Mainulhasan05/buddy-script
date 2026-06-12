@@ -1,16 +1,29 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Navbar from '@/src/components/layout/Navbar';
 import LeftSidebar from '@/src/components/layout/LeftSidebar';
 import RightSidebar from '@/src/components/layout/RightSidebar';
 import FeedContainer from '@/src/components/feed/FeedContainer';
-import { toggleDarkMode } from '@/src/store/slices/uiSlice';
+import { toggleDarkMode, setDarkMode } from '@/src/store/slices/uiSlice';
 
 export default function FeedPage() {
   const dispatch = useDispatch();
   const darkMode = useSelector((s) => s.ui.darkMode);
+
+  // Load theme preference on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('darkMode') === 'true';
+    if (saved) {
+      dispatch(setDarkMode(true));
+    }
+  }, [dispatch]);
+
+  // Persist theme preference on change
+  useEffect(() => {
+    localStorage.setItem('darkMode', darkMode);
+  }, [darkMode]);
 
   return (
     <div className={`_layout _layout_main_wrapper ${darkMode ? '_dark_wrapper' : ''}`}>

@@ -5,68 +5,88 @@ import { useDispatch, useSelector } from 'react-redux';
 import { hideToast } from '@/src/store/slices/uiSlice';
 
 const BG = {
-  success: '#22c55e',
-  error: '#ef4444',
-  info: '#3b82f6',
+  success: '#16a34a',
+  error: '#dc2626',
+  info: '#2563eb',
 };
 
 export default function Toast() {
   const dispatch = useDispatch();
-  const { message, type, visible } = useSelector((s) => s.ui.toast);
+  const toasts = useSelector((s) => s.ui.toasts || []);
 
   useEffect(() => {
-    if (!visible) return;
-    const t = setTimeout(() => dispatch(hideToast()), 3500);
-    return () => clearTimeout(t);
-  }, [visible, message, dispatch]);
+    if (toasts.length === 0) return undefined;
+    const timers = toasts.map((toast) =>
+      setTimeout(() => dispatch(hideToast(toast.id)), toast.duration || 3000)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [toasts, dispatch]);
 
-  if (!visible) return null;
+  if (toasts.length === 0) return null;
 
   return (
     <div
-      role="alert"
       aria-live="polite"
+      aria-relevant="additions removals"
       style={{
         position: 'fixed',
-        bottom: 24,
+        top: 24,
         right: 24,
         zIndex: 99999,
-        background: BG[type] || BG.info,
-        color: '#fff',
-        padding: '12px 20px',
-        borderRadius: 8,
-        fontSize: 14,
-        fontWeight: 500,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        maxWidth: 360,
         display: 'flex',
-        alignItems: 'center',
+        flexDirection: 'column',
         gap: 10,
-        animation: 'slideUp 0.2s ease',
+        width: 'min(360px, calc(100vw - 32px))',
       }}
     >
-      <span style={{ flex: 1 }}>{message}</span>
-      <button
-        type="button"
-        onClick={() => dispatch(hideToast())}
-        style={{
-          background: 'none',
-          border: 'none',
-          color: '#fff',
-          cursor: 'pointer',
-          fontSize: 18,
-          lineHeight: 1,
-          padding: 0,
-          opacity: 0.8,
-        }}
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
+      {toasts.map(({ id, message, type }) => (
+        <div
+          key={id}
+          role="alert"
+          style={{
+            background: BG[type] || BG.info,
+            color: '#fff',
+            padding: '12px 16px',
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            boxShadow: '0 10px 24px rgba(0,0,0,0.16)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            animation: 'slideDown 0.2s ease',
+          }}
+        >
+          <span style={{ flex: 1 }}>{message}</span>
+          <button
+            type="button"
+            onClick={() => dispatch(hideToast(id))}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: 18,
+              lineHeight: 1,
+              padding: 0,
+              opacity: 0.85,
+            }}
+            aria-label="Dismiss notification"
+          >
+            x
+          </button>
+        </div>
+      ))}
       <style>{`
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 640px) {
+          [aria-live="polite"] {
+            right: 50% !important;
+            transform: translateX(50%);
+          }
         }
       `}</style>
     </div>
