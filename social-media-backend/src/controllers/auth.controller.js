@@ -46,4 +46,22 @@ const getMe = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, refresh, logout, getMe };
+const googleStart = (req, res, next) => {
+  try {
+    const authUrl = authService.getGoogleAuthUrl(req);
+    res.redirect(authUrl);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const googleCallback = async (req, res, next) => {
+  try {
+    const result = await authService.googleCallback(req, res);
+    res.redirect(result.redirectUrl);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { register, login, refresh, logout, getMe, googleStart, googleCallback };

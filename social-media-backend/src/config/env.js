@@ -25,6 +25,11 @@ const envSchema = z
     CLOUDINARY_API_KEY: z.string().default(''),
     CLOUDINARY_API_SECRET: z.string().default(''),
 
+    // Google OAuth — optional until configured
+    GOOGLE_CLIENT_ID: z.string().default(''),
+    GOOGLE_CLIENT_SECRET: z.string().default(''),
+    GOOGLE_CALLBACK_URL: z.string().default(''),
+
     // CORS
     CLIENT_URL: z.string().default('http://localhost:3000'),
   })
@@ -49,4 +54,3 @@ if (!parsed.success) {
 }
 
 module.exports = parsed.data;
-

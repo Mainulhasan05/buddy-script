@@ -24,9 +24,10 @@ const registerLimiter = createLimiter({
 
 router.post('/register', registerLimiter, validate(registerSchema), authController.register);
 router.post('/login', loginLimiter, validate(loginSchema), authController.login);
+router.get('/google', authController.googleStart);
+router.get('/google/callback', authController.googleCallback);
 router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
 router.get('/me', authenticate, authController.getMe);
 
 module.exports = router;
-

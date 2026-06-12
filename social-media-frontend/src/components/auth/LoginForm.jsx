@@ -25,6 +25,9 @@ export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const sessionExpired = searchParams.get('reason') === 'session-expired';
   const redirectTo = searchParams.get('redirectTo') || '/feed';
+  const startGoogleLogin = () => {
+    window.location.href = authApi.getGoogleLoginUrl(redirectTo);
+  };
 
   const validateField = (name, value) => {
     if (name === 'email') {
@@ -130,7 +133,7 @@ export default function LoginForm() {
                 <button
                   type="button"
                   className="_social_login_content_btn _mar_b40"
-                  onClick={() => dispatch(showToast({ message: 'Google Sign-In is not supported in this version. Please log in with your email.', type: 'info' }))}
+                  onClick={startGoogleLogin}
                 >
                   <img src="/assets/images/google.svg" alt="Image" className="_google_img" /> <span>Or sign-in with google</span>
                 </button>

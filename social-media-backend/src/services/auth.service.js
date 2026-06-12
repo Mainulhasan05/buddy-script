@@ -8,6 +8,9 @@ const env = require('../config/env');
 const BCRYPT_ROUNDS = 12;
 const DEFAULT_AVATAR_BASE_URL = 'https://xsgames.co/randomusers/assets/avatars/male';
 const DEFAULT_AVATAR_COUNT = 50;
+const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
 // Cookie options for the httpOnly refresh token
 const REFRESH_COOKIE_OPTIONS = {
@@ -52,6 +55,157 @@ const getDefaultAvatarUrl = async () => {
   const userCount = await User.estimatedDocumentCount();
   const avatarNumber = (userCount % DEFAULT_AVATAR_COUNT) + 1;
   return `${DEFAULT_AVATAR_BASE_URL}/${avatarNumber}.jpg`;
+};
+
+const getGoogleCallbackUrl = (req) => {
+  if (env.GOOGLE_CALLBACK_URL) return env.GOOGLE_CALLBACK_URL;
+  return `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+};
+
+const encodeOAuthState = (state) => {
+  return Buffer.from(JSON.stringify(state), 'utf8').toString('base64url');
+};
+
+const decodeOAuthState = (state) => {
+  if (!state) return {};
+  try {
+    return JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+  } catch {
+    return {};
+  }
+};
+
+const assertGoogleConfigured = () => {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    const err = new Error('Google login is not configured');
+    err.statusCode = 503;
+    err.code = 'GOOGLE_AUTH_NOT_CONFIGURED';
+    throw err;
+  }
+};
+
+const getGoogleAuthUrl = (req) => {
+  assertGoogleConfigured();
+
+  const redirectTo = typeof req.query?.redirectTo === 'string' && req.query.redirectTo.startsWith('/')
+    ? req.query.redirectTo
+    : '/feed';
+
+  const params = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID,
+    redirect_uri: getGoogleCallbackUrl(req),
+    response_type: 'code',
+    scope: 'openid email profile',
+    prompt: 'select_account',
+    state: encodeOAuthState({ redirectTo }),
+  });
+
+  return `${GOOGLE_AUTH_URL}?${params.toString()}`;
+};
+
+const exchangeGoogleCode = async (req, code) => {
+  const response = await fetch(GOOGLE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: getGoogleCallbackUrl(req),
+      grant_type: 'authorization_code',
+    }),
+  });
+
+  if (!response.ok) {
+    const err = new Error('Google login failed');
+    err.statusCode = 401;
+    err.code = 'GOOGLE_TOKEN_EXCHANGE_FAILED';
+    throw err;
+  }
+
+  return response.json();
+};
+
+const fetchGoogleProfile = async (accessToken) => {
+  const response = await fetch(GOOGLE_USERINFO_URL, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const err = new Error('Google profile fetch failed');
+    err.statusCode = 401;
+    err.code = 'GOOGLE_PROFILE_FAILED';
+    throw err;
+  }
+
+  return response.json();
+};
+
+const findOrCreateGoogleUser = async (profile) => {
+  if (!profile.email || profile.email_verified === false) {
+    const err = new Error('Google email is not verified');
+    err.statusCode = 401;
+    err.code = 'GOOGLE_EMAIL_NOT_VERIFIED';
+    throw err;
+  }
+
+  const existing = await User.findOne({ email: profile.email.toLowerCase().trim() });
+  if (existing) {
+    let shouldSave = false;
+    if (!existing.avatar?.url && profile.picture) {
+      existing.avatar = { url: profile.picture, publicId: null };
+      shouldSave = true;
+    }
+    if (shouldSave) await existing.save();
+    return existing;
+  }
+
+  const [firstNameFromName, ...lastNameParts] = (profile.name || '').trim().split(/\s+/);
+  const firstName = profile.given_name || firstNameFromName || 'Google';
+  const lastName = profile.family_name || lastNameParts.join(' ') || 'User';
+  const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), BCRYPT_ROUNDS);
+
+  return User.create({
+    firstName,
+    lastName,
+    email: profile.email.toLowerCase().trim(),
+    passwordHash,
+    avatar: {
+      url: profile.picture || await getDefaultAvatarUrl(),
+      publicId: null,
+    },
+  });
+};
+
+const googleCallback = async (req, res) => {
+  assertGoogleConfigured();
+
+  const { code, state } = req.query;
+  if (!code) {
+    const err = new Error('Google login was cancelled');
+    err.statusCode = 400;
+    err.code = 'GOOGLE_AUTH_CANCELLED';
+    throw err;
+  }
+
+  const tokenResult = await exchangeGoogleCode(req, code);
+  const profile = await fetchGoogleProfile(tokenResult.access_token);
+  const user = await findOrCreateGoogleUser(profile);
+  const accessToken = await issueTokens(user, res, {
+    userAgent: req.headers['user-agent'],
+    ip: req.ip,
+  });
+
+  const decodedState = decodeOAuthState(state);
+  const redirectTo = typeof decodedState.redirectTo === 'string' && decodedState.redirectTo.startsWith('/')
+    ? decodedState.redirectTo
+    : '/feed';
+
+  const callbackUrl = new URL('/auth/google/callback', env.CLIENT_URL);
+  callbackUrl.searchParams.set('accessToken', accessToken);
+  callbackUrl.searchParams.set('redirectTo', redirectTo);
+
+  return { redirectUrl: callbackUrl.toString() };
 };
 
 /**
@@ -198,4 +352,4 @@ const getMe = async (req) => {
   return user.toPublicJSON();
 };
 
-module.exports = { register, login, refresh, logout, getMe };
+module.exports = { register, login, refresh, logout, getMe, getGoogleAuthUrl, googleCallback };

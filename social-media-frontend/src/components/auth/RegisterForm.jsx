@@ -7,7 +7,6 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authApi } from '@/src/api/auth.api';
 import { setCredentials } from '@/src/store/slices/authSlice';
-import { showToast } from '@/src/store/slices/uiSlice';
 import Button from '@/src/components/ui/Button';
 import { getErrorMessage, normalizeApiError } from '@/src/utils/apiError';
 import FormFieldError from '@/src/components/ui/FormFieldError';
@@ -32,6 +31,9 @@ export default function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const redirectTo = searchParams.get('redirectTo') || '/feed';
+  const startGoogleLogin = () => {
+    window.location.href = authApi.getGoogleLoginUrl(redirectTo);
+  };
 
   const validateField = (name, value, allValues) => {
     if (name === 'firstName') {
@@ -171,7 +173,7 @@ export default function RegisterForm() {
                 <button
                   type="button"
                   className="_social_registration_content_btn _mar_b40"
-                  onClick={() => dispatch(showToast({ message: 'Google Registration is not supported in this version. Please register with your email.', type: 'info' }))}
+                  onClick={startGoogleLogin}
                 >
                   <img src="/assets/images/google.svg" alt="Image" className="_google_img" /> <span>Register with google</span>
                 </button>
