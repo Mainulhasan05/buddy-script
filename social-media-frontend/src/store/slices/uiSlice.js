@@ -14,6 +14,7 @@ const initialState = {
     type: 'info', // 'info' | 'success' | 'error'
     visible: false,
   },
+  darkMode: false,
 };
 
 const uiSlice = createSlice({
@@ -40,6 +41,9 @@ const uiSlice = createSlice({
     hideToast(state) {
       state.toast.visible = false;
     },
+    toggleDarkMode(state) {
+      state.darkMode = !state.darkMode;
+    },
   },
 });
 
@@ -50,6 +54,7 @@ export const {
   closeLikeListModal,
   showToast,
   hideToast,
+  toggleDarkMode,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

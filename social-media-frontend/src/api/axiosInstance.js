@@ -1,8 +1,13 @@
 'use client';
 
 import axios from 'axios';
-import { store } from '@/src/store';
 import { setAccessToken, logout } from '@/src/store/slices/authSlice';
+
+let store;
+
+export const injectStore = (_store) => {
+  store = _store;
+};
 
 const axiosInstance = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
@@ -12,7 +17,7 @@ const axiosInstance = axios.create({
 
 // Request interceptor — attach access token from Redux store
 axiosInstance.interceptors.request.use((config) => {
-  const token = store.getState().auth.accessToken;
+  const token = store?.getState()?.auth?.accessToken;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -56,14 +61,14 @@ axiosInstance.interceptors.response.use(
         const { data } = await axiosInstance.post('/auth/refresh');
         const newToken = data.data.accessToken;
 
-        store.dispatch(setAccessToken(newToken));
+        store?.dispatch(setAccessToken(newToken));
         processQueue(null, newToken);
 
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return axiosInstance(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        store.dispatch(logout());
+        store?.dispatch(logout());
 
         // Redirect to login (client-side only)
         if (typeof window !== 'undefined') {

@@ -90,6 +90,12 @@ export default function RegisterForm() {
                 <p className="_social_registration_content_para _mar_b8">Get Started Now</p>
                 <h4 className="_social_registration_content_title _titl4 _mar_b50">Registration</h4>
 
+                <button type="button" className="_social_registration_content_btn _mar_b40">
+                  <img src="/assets/images/google.svg" alt="Image" className="_google_img" /> <span>Register with google</span>
+                </button>
+                <div className="_social_registration_content_bottom_txt _mar_b40"> <span>Or</span>
+                </div>
+
                 {error && (
                   <div className="alert alert-danger" role="alert" style={{ marginBottom: '16px' }}>
                     {error}
@@ -169,6 +175,23 @@ export default function RegisterForm() {
                           required
                           autoComplete="new-password"
                         />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="row">
+                    <div className="col-lg-12 col-xl-12 col-md-12 col-sm-12">
+                      <div className="form-check _social_registration_form_check">
+                        <input
+                          className="form-check-input _social_registration_form_check_input"
+                          type="radio"
+                          name="flexRadioDefault"
+                          id="flexRadioDefault2"
+                          defaultChecked
+                        />
+                        <label className="form-check-label _social_registration_form_check_label" htmlFor="flexRadioDefault2">
+                          I agree to terms & conditions
+                        </label>
                       </div>
                     </div>
                   </div>

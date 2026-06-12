@@ -71,6 +71,12 @@ export default function LoginForm() {
                 <p className="_social_login_content_para _mar_b8">Welcome back</p>
                 <h4 className="_social_login_content_title _titl4 _mar_b50">Login to your account</h4>
 
+                <button type="button" className="_social_login_content_btn _mar_b40">
+                  <img src="/assets/images/google.svg" alt="Image" className="_google_img" /> <span>Or sign-in with google</span>
+                </button>
+                <div className="_social_login_content_bottom_txt _mar_b40"> <span>Or</span>
+                </div>
+
                 {error && (
                   <div className="alert alert-danger" role="alert" style={{ marginBottom: '16px' }}>
                     {error}
@@ -105,6 +111,30 @@ export default function LoginForm() {
                           required
                           autoComplete="current-password"
                         />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="row">
+                    <div className="col-lg-6 col-xl-6 col-md-6 col-sm-12">
+                      <div className="form-check _social_login_form_check">
+                        <input
+                          className="form-check-input _social_login_form_check_input"
+                          type="radio"
+                          name="flexRadioDefault"
+                          id="flexRadioDefault2"
+                          defaultChecked
+                        />
+                        <label className="form-check-label _social_login_form_check_label" htmlFor="flexRadioDefault2">
+                          Remember me
+                        </label>
+                      </div>
+                    </div>
+                    <div className="col-lg-6 col-xl-6 col-md-6 col-sm-12">
+                      <div className="_social_login_form_left">
+                        <p className="_social_login_form_left_para" style={{ cursor: 'pointer' }}>
+                          Forgot password?
+                        </p>
                       </div>
                     </div>
                   </div>
