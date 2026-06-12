@@ -47,15 +47,15 @@ const addComment = async ({ postId, userId, content }) => {
   });
 
   // Publish async event — worker will $inc post.commentCount
-  try {
-    publish(ROUTING_KEYS.COMMENT_CREATED, {
-      postId: postId.toString(),
-      commentId: comment._id.toString(),
-      delta: 1,
-    });
-  } catch (err) {
-    logger.error(`Failed to publish comment.created: ${err.message}`);
-  }
+  // publish() is safe — silently drops if RabbitMQ is not connected
+  publish(ROUTING_KEYS.COMMENT_CREATED, {
+    postId: postId.toString(),
+    commentId: comment._id.toString(),
+    delta: 1,
+  });
+
+  // Synchronous fallback: directly increment commentCount when no workers
+  await Post.updateOne({ _id: postId }, { $inc: { commentCount: 1 } });
 
   // Invalidate comment cache for this post
   await cacheService.del(CACHE_KEYS.POST_COMMENTS(postId));
@@ -93,16 +93,15 @@ const addReply = async ({ commentId, userId, content }) => {
     content,
   });
 
-  // Increment replyCount on the parent comment async
-  try {
-    publish(ROUTING_KEYS.COMMENT_CREATED, {
-      postId: parent.postId.toString(),
-      commentId: commentId.toString(),
-      replyDelta: 1,
-    });
-  } catch (err) {
-    logger.error(`Failed to publish reply comment.created: ${err.message}`);
-  }
+  // Publish async event for reply count
+  publish(ROUTING_KEYS.COMMENT_CREATED, {
+    postId: parent.postId.toString(),
+    commentId: commentId.toString(),
+    replyDelta: 1,
+  });
+
+  // Synchronous fallback: directly increment replyCount on parent comment
+  await Comment.updateOne({ _id: commentId }, { $inc: { replyCount: 1 } });
 
   return reply;
 };

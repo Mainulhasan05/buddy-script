@@ -1,26 +1,33 @@
-@import "tailwindcss";
+/* Template CSS is loaded via <link> tags in layout.js */
+/* This file handles any global overrides needed for Next.js compatibility */
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Skeleton animation (used by PostSkeleton) */
+@keyframes _skeleton_pulse_anim {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+._skeleton_pulse {
+  animation: _skeleton_pulse_anim 1.5s ease-in-out infinite;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Toast slide-up animation */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Active like button state */
+._feed_reaction_active ._feed_inner_timeline_reaction_link {
+  color: #377DFF !important;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Ensure modal backdrops work above navbar */
+._modal_backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
 }

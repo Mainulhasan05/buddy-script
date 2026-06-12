@@ -41,12 +41,8 @@ const createPost = async ({ userId, content, file, visibility = 'public' }) => {
   });
 
   // Publish async event — feed invalidation worker handles cache clearing
-  try {
-    publish(ROUTING_KEYS.POST_CREATED, { postId: post._id.toString() });
-  } catch (err) {
-    // RabbitMQ failure must not break post creation
-    logger.error(`Failed to publish post.created: ${err.message}`);
-  }
+  // publish() is safe — silently drops if RabbitMQ is not connected
+  publish(ROUTING_KEYS.POST_CREATED, { postId: post._id.toString() });
 
   // Eagerly invalidate feed cache without waiting for worker
   await cacheService.scanDel('feed:public:*');

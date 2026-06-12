@@ -10,6 +10,11 @@ let connection = null;
 let channel = null;
 
 const connectRabbitMQ = async () => {
+  if (!env.RABBITMQ_URL) {
+    logger.warn('Skipping RabbitMQ connection — RABBITMQ_URL not set (events will be dropped)');
+    return;
+  }
+
   try {
     connection = await amqplib.connect(env.RABBITMQ_URL);
     channel = await connection.createChannel();
@@ -36,12 +41,20 @@ const connectRabbitMQ = async () => {
 };
 
 const getChannel = () => {
-  if (!channel) throw new Error('RabbitMQ channel not available');
+  if (!channel) return null; // Return null instead of throwing when not available
   return channel;
 };
 
+/**
+ * Publish a message to the topic exchange.
+ * Silently drops if RabbitMQ is not connected (graceful degradation).
+ */
 const publish = (routingKey, payload) => {
   const ch = getChannel();
+  if (!ch) {
+    logger.warn(`RabbitMQ not available — dropping event: ${routingKey}`);
+    return;
+  }
   const content = Buffer.from(JSON.stringify(payload));
   ch.publish(EXCHANGE_NAME, routingKey, content, {
     persistent: true,

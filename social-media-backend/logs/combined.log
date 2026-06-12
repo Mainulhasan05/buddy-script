@@ -1,0 +1,70 @@
+{"level":"warn","message":"Redis not configured — running without cache (REDIS_URL is empty)","timestamp":"2026-06-12T01:09:44.040Z"}
+{"level":"warn","message":"Cloudinary not configured — image uploads will fail (set CLOUDINARY_* env vars)","timestamp":"2026-06-12T01:09:45.227Z"}
+{"level":"warn","message":"Redis not configured — running without cache (REDIS_URL is empty)","timestamp":"2026-06-12T01:10:46.717Z"}
+{"level":"warn","message":"Cloudinary not configured — image uploads will fail (set CLOUDINARY_* env vars)","timestamp":"2026-06-12T01:10:47.812Z"}
+{"level":"warn","message":"Redis not configured — running without cache (REDIS_URL is empty)","timestamp":"2026-06-12T01:11:04.673Z"}
+{"level":"warn","message":"Cloudinary not configured — image uploads will fail (set CLOUDINARY_* env vars)","timestamp":"2026-06-12T01:11:05.680Z"}
+{"level":"info","message":"MongoDB connected: ac-ac9fwp6-shard-00-01.ayxggxu.mongodb.net","timestamp":"2026-06-12T01:11:06.810Z"}
+{"level":"warn","message":"Skipping Redis connection — REDIS_URL not set","timestamp":"2026-06-12T01:11:06.812Z"}
+{"level":"warn","message":"Skipping RabbitMQ connection — RABBITMQ_URL not set (events will be dropped)","timestamp":"2026-06-12T01:11:06.813Z"}
+{"level":"warn","message":"RabbitMQ not configured — workers not started (counters update directly on write)","timestamp":"2026-06-12T01:11:06.814Z"}
+{"level":"info","message":"Server running on port 5000 [development]","timestamp":"2026-06-12T01:11:06.824Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:11:49 +0000] \"GET /health HTTP/1.1\" 200 74 \"-\" \"Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.19041.6456\"","timestamp":"2026-06-12T01:11:49.211Z"}
+{"level":"warn","message":"Redis not configured — running without cache (REDIS_URL is empty)","timestamp":"2026-06-12T01:12:50.056Z"}
+{"level":"warn","message":"Cloudinary not configured — image uploads will fail (set CLOUDINARY_* env vars)","timestamp":"2026-06-12T01:12:50.867Z"}
+{"level":"info","message":"MongoDB connected: ac-ac9fwp6-shard-00-01.ayxggxu.mongodb.net","timestamp":"2026-06-12T01:12:52.150Z"}
+{"level":"warn","message":"Skipping Redis connection — REDIS_URL not set","timestamp":"2026-06-12T01:12:52.152Z"}
+{"level":"warn","message":"Skipping RabbitMQ connection — RABBITMQ_URL not set (events will be dropped)","timestamp":"2026-06-12T01:12:52.153Z"}
+{"level":"warn","message":"RabbitMQ not configured — workers not started (counters update directly on write)","timestamp":"2026-06-12T01:12:52.154Z"}
+{"level":"info","message":"Server running on port 5000 [development]","timestamp":"2026-06-12T01:12:52.162Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:17:44 +0000] \"POST /api/auth/register HTTP/1.1\" 201 522 \"-\" \"-\"","timestamp":"2026-06-12T01:17:44.681Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:17:44 +0000] \"GET /api/auth/me HTTP/1.1\" 200 256 \"-\" \"-\"","timestamp":"2026-06-12T01:17:44.784Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:17:45 +0000] \"POST /api/auth/refresh HTTP/1.1\" 200 299 \"-\" \"-\"","timestamp":"2026-06-12T01:17:45.030Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:17:46 +0000] \"POST /api/auth/login HTTP/1.1\" 200 515 \"-\" \"-\"","timestamp":"2026-06-12T01:17:46.000Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:17:46 +0000] \"POST /api/auth/logout HTTP/1.1\" 200 64 \"-\" \"-\"","timestamp":"2026-06-12T01:17:46.065Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:17:46 +0000] \"GET /api/auth/me HTTP/1.1\" 401 87 \"-\" \"-\"","timestamp":"2026-06-12T01:17:46.070Z"}
+{"level":"warn","message":"Redis not configured — running without cache (REDIS_URL is empty)","timestamp":"2026-06-12T01:18:20.455Z"}
+{"level":"warn","message":"Cloudinary not configured — image uploads will fail (set CLOUDINARY_* env vars)","timestamp":"2026-06-12T01:18:21.038Z"}
+{"level":"info","message":"MongoDB connected: ac-ac9fwp6-shard-00-00.ayxggxu.mongodb.net","timestamp":"2026-06-12T01:18:22.047Z"}
+{"level":"warn","message":"Skipping Redis connection — REDIS_URL not set","timestamp":"2026-06-12T01:18:22.049Z"}
+{"level":"warn","message":"Skipping RabbitMQ connection — RABBITMQ_URL not set (events will be dropped)","timestamp":"2026-06-12T01:18:22.051Z"}
+{"level":"warn","message":"RabbitMQ not configured — workers not started (counters update directly on write)","timestamp":"2026-06-12T01:18:22.052Z"}
+{"level":"info","message":"Server running on port 5000 [development]","timestamp":"2026-06-12T01:18:22.058Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:37 +0000] \"POST /api/auth/register HTTP/1.1\" 201 536 \"-\" \"-\"","timestamp":"2026-06-12T01:18:37.648Z"}
+{"level":"warn","message":"RabbitMQ not available — dropping event: post.created","timestamp":"2026-06-12T01:18:37.776Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:37 +0000] \"POST /api/posts HTTP/1.1\" 201 396 \"-\" \"-\"","timestamp":"2026-06-12T01:18:37.780Z"}
+{"level":"warn","message":"RabbitMQ not available — dropping event: post.created","timestamp":"2026-06-12T01:18:37.894Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:37 +0000] \"POST /api/posts HTTP/1.1\" 201 389 \"-\" \"-\"","timestamp":"2026-06-12T01:18:37.897Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:37 +0000] \"GET /api/posts/feed HTTP/1.1\" 200 447 \"-\" \"-\"","timestamp":"2026-06-12T01:18:37.960Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:38 +0000] \"GET /api/posts/6a2b5e6dac1362b8b1f396ce HTTP/1.1\" 200 396 \"-\" \"-\"","timestamp":"2026-06-12T01:18:38.022Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:38 +0000] \"GET /api/posts/my HTTP/1.1\" 200 792 \"-\" \"-\"","timestamp":"2026-06-12T01:18:38.079Z"}
+{"level":"warn","message":"RabbitMQ not available — dropping event: like.created","timestamp":"2026-06-12T01:18:38.192Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:38 +0000] \"POST /api/likes/toggle HTTP/1.1\" 200 72 \"-\" \"-\"","timestamp":"2026-06-12T01:18:38.246Z"}
+{"level":"warn","message":"RabbitMQ not available — dropping event: like.deleted","timestamp":"2026-06-12T01:18:38.375Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:38 +0000] \"POST /api/likes/toggle HTTP/1.1\" 200 75 \"-\" \"-\"","timestamp":"2026-06-12T01:18:38.426Z"}
+{"level":"warn","message":"RabbitMQ not available — dropping event: like.created","timestamp":"2026-06-12T01:18:38.539Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:38 +0000] \"POST /api/likes/toggle HTTP/1.1\" 200 72 \"-\" \"-\"","timestamp":"2026-06-12T01:18:38.591Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:38 +0000] \"GET /api/likes/post/6a2b5e6dac1362b8b1f396ce HTTP/1.1\" 200 242 \"-\" \"-\"","timestamp":"2026-06-12T01:18:38.651Z"}
+{"level":"warn","message":"RabbitMQ not available — dropping event: comment.created","timestamp":"2026-06-12T01:18:38.822Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:38 +0000] \"POST /api/posts/6a2b5e6dac1362b8b1f396ce/comments HTTP/1.1\" 201 410 \"-\" \"-\"","timestamp":"2026-06-12T01:18:38.886Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:38 +0000] \"GET /api/posts/6a2b5e6dac1362b8b1f396ce/comments HTTP/1.1\" 200 464 \"-\" \"-\"","timestamp":"2026-06-12T01:18:38.946Z"}
+{"level":"warn","message":"RabbitMQ not available — dropping event: comment.created","timestamp":"2026-06-12T01:18:39.105Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:39 +0000] \"POST /api/comments/6a2b5e6eac1362b8b1f396e4/replies HTTP/1.1\" 201 426 \"-\" \"-\"","timestamp":"2026-06-12T01:18:39.161Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:39 +0000] \"GET /api/comments/6a2b5e6eac1362b8b1f396e4/replies HTTP/1.1\" 200 481 \"-\" \"-\"","timestamp":"2026-06-12T01:18:39.216Z"}
+{"level":"warn","message":"RabbitMQ not available — dropping event: like.created","timestamp":"2026-06-12T01:18:39.326Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:39 +0000] \"POST /api/likes/toggle HTTP/1.1\" 200 72 \"-\" \"-\"","timestamp":"2026-06-12T01:18:39.377Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:39 +0000] \"DELETE /api/posts/6a2b5e6dac1362b8b1f396ce HTTP/1.1\" 200 53 \"-\" \"-\"","timestamp":"2026-06-12T01:18:39.494Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:18:39 +0000] \"GET /api/posts/feed HTTP/1.1\" 200 100 \"-\" \"-\"","timestamp":"2026-06-12T01:18:39.550Z"}
+{"level":"warn","message":"Redis not configured — running without cache (REDIS_URL is empty)","timestamp":"2026-06-12T01:18:58.881Z"}
+{"level":"warn","message":"Cloudinary not configured — image uploads will fail (set CLOUDINARY_* env vars)","timestamp":"2026-06-12T01:18:59.615Z"}
+{"level":"info","message":"MongoDB connected: ac-ac9fwp6-shard-00-00.ayxggxu.mongodb.net","timestamp":"2026-06-12T01:19:01.080Z"}
+{"level":"warn","message":"Skipping Redis connection — REDIS_URL not set","timestamp":"2026-06-12T01:19:01.082Z"}
+{"level":"warn","message":"Skipping RabbitMQ connection — RABBITMQ_URL not set (events will be dropped)","timestamp":"2026-06-12T01:19:01.083Z"}
+{"level":"warn","message":"RabbitMQ not configured — workers not started (counters update directly on write)","timestamp":"2026-06-12T01:19:01.084Z"}
+{"level":"info","message":"Server running on port 5000 [development]","timestamp":"2026-06-12T01:19:01.094Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:26:53 +0000] \"POST /api/auth/register HTTP/1.1\" 201 492 \"http://localhost:3000/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\"","timestamp":"2026-06-12T01:26:53.979Z"}
+{"level":"error","message":"POST /api/auth/register — Email already in use","stack":"Error: Email already in use\n    at Object.register (D:\\AppifyLab\\project\\social-media-backend\\src\\services\\auth.service.js:52:17)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async register (D:\\AppifyLab\\project\\social-media-backend\\src\\controllers\\auth.controller.js:6:20)","timestamp":"2026-06-12T01:27:35.504Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:27:35 +0000] \"POST /api/auth/register HTTP/1.1\" 409 83 \"http://localhost:3000/\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\"","timestamp":"2026-06-12T01:27:35.515Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:29:09 +0000] \"GET / HTTP/1.1\" 404 64 \"-\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\"","timestamp":"2026-06-12T01:29:09.180Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:29:09 +0000] \"GET /favicon.ico HTTP/1.1\" 404 64 \"-\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\"","timestamp":"2026-06-12T01:29:09.555Z"}
+{"level":"info","message":"::1 - - [12/Jun/2026:01:38:22 +0000] \"GET / HTTP/1.1\" 404 64 \"-\" \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36\"","timestamp":"2026-06-12T01:38:22.294Z"}

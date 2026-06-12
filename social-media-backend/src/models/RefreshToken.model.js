@@ -32,7 +32,7 @@ const refreshTokenSchema = new Schema(
 
 // TTL index — MongoDB auto-purges expired tokens
 refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-refreshTokenSchema.index({ token: 1 }, { unique: true });
+// token unique index is auto-created by `unique: true` on the field
 refreshTokenSchema.index({ userId: 1 });
 
 const RefreshToken = mongoose.model('RefreshToken', refreshTokenSchema, 'refresh_tokens');

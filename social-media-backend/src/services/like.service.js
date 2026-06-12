@@ -25,32 +25,14 @@ const toggle = async ({ userId, targetId, targetType }) => {
     isLiked = false;
     delta = -1;
     await cacheService.sRem(CACHE_KEYS.LIKES(targetType, targetId), userId.toString());
-
-    try {
-      publish(ROUTING_KEYS.LIKE_DELETED, {
-        targetId: targetId.toString(),
-        targetType,
-        delta: -1,
-      });
-    } catch (err) {
-      logger.error(`Failed to publish like.deleted: ${err.message}`);
-    }
+    publish(ROUTING_KEYS.LIKE_DELETED, { targetId: targetId.toString(), targetType, delta: -1 });
   } else {
     // Like
     await Like.create({ userId, targetId, targetType });
     isLiked = true;
     delta = 1;
     await cacheService.sAdd(CACHE_KEYS.LIKES(targetType, targetId), userId.toString());
-
-    try {
-      publish(ROUTING_KEYS.LIKE_CREATED, {
-        targetId: targetId.toString(),
-        targetType,
-        delta: 1,
-      });
-    } catch (err) {
-      logger.error(`Failed to publish like.created: ${err.message}`);
-    }
+    publish(ROUTING_KEYS.LIKE_CREATED, { targetId: targetId.toString(), targetType, delta: 1 });
   }
 
   // Optimistic count — read from DB (worker will sync async)

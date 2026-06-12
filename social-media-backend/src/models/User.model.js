@@ -40,8 +40,7 @@ const userSchema = new Schema(
   { timestamps: true }
 );
 
-// Indexes
-userSchema.index({ email: 1 }, { unique: true });
+// Indexes — email unique index is auto-created by `unique: true` on the field
 userSchema.index({ createdAt: -1 });
 
 // Instance method — safe public representation
