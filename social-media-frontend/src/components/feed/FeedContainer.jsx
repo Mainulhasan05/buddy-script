@@ -8,13 +8,16 @@ import PostSkeleton from './PostSkeleton';
 import InfiniteScrollTrigger from './InfiniteScrollTrigger';
 import CreatePostModal from './CreatePostModal';
 import LikeList from '@/src/components/post/LikeList';
+import EmptyState from '@/src/components/ui/EmptyState';
+import RetryState from '@/src/components/ui/RetryState';
+import InlineSpinner from '@/src/components/ui/InlineSpinner';
 
 export default function FeedContainer() {
   const dispatch = useDispatch();
   const user = useSelector((s) => s.auth.user);
   const createModalOpen = useSelector((s) => s.ui.createPostModal);
 
-  const { posts, hasMore, loading, loadMore } = useFeed();
+  const { posts, hasMore, loading, loadingMore, error, loadMore, retry } = useFeed();
 
   return (
     <>
@@ -82,11 +85,17 @@ export default function FeedContainer() {
         </>
       )}
 
-      {/* Empty state */}
-      {!loading && posts.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '48px 0', color: '#888' }}>
-          <p style={{ fontSize: 16 }}>No posts yet. Be the first to share something!</p>
-        </div>
+      {!loading && error && posts.length === 0 && (
+        <RetryState message={error} onRetry={retry} retrying={loading} />
+      )}
+
+      {!loading && !error && posts.length === 0 && (
+        <EmptyState
+          heading="No posts yet"
+          subtext="Be the first to share something with your community."
+          actionLabel="Create a post"
+          onAction={() => dispatch(openCreatePostModal())}
+        />
       )}
 
       {/* Feed posts */}
@@ -95,10 +104,19 @@ export default function FeedContainer() {
       ))}
 
       {/* Loading indicator for infinite scroll */}
-      {loading && posts.length > 0 && <PostSkeleton />}
+      {loadingMore && posts.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: 18, color: '#64748b' }}>
+          <InlineSpinner />
+          <span>Loading more posts...</span>
+        </div>
+      )}
+
+      {!loadingMore && error && posts.length > 0 && (
+        <RetryState message={error} onRetry={loadMore} retrying={loadingMore} />
+      )}
 
       {/* Trigger for loading more */}
-      <InfiniteScrollTrigger onVisible={loadMore} hasMore={hasMore} loading={loading} />
+      <InfiniteScrollTrigger onVisible={loadMore} hasMore={hasMore} loading={loading || loadingMore} />
 
       {/* Modals */}
       {createModalOpen && <CreatePostModal />}

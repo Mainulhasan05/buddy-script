@@ -6,6 +6,10 @@ import { commentApi } from '@/src/api/comment.api';
 import CommentItem from './CommentItem';
 import { incrementCommentCount } from '@/src/store/slices/feedSlice';
 import { showToast } from '@/src/store/slices/uiSlice';
+import Button from '@/src/components/ui/Button';
+import EmptyState from '@/src/components/ui/EmptyState';
+import RetryState from '@/src/components/ui/RetryState';
+import { getErrorMessage } from '@/src/utils/apiError';
 
 export default function CommentSection({ postId }) {
   const dispatch = useDispatch();
@@ -18,6 +22,8 @@ export default function CommentSection({ postId }) {
   const [loaded, setLoaded] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [fieldError, setFieldError] = useState('');
 
   // Lazy load on first render
   useEffect(() => {
@@ -27,6 +33,7 @@ export default function CommentSection({ postId }) {
 
   const fetchComments = async (cursor) => {
     setLoading(true);
+    setLoadError('');
     try {
       const { data } = await commentApi.getComments(postId, cursor);
       setComments((prev) => (cursor ? [...prev, ...data.data] : data.data));
@@ -34,7 +41,7 @@ export default function CommentSection({ postId }) {
       setHasMore(data.pagination?.hasMore ?? false);
       setLoaded(true);
     } catch (err) {
-      dispatch(showToast({ message: err.response?.data?.message || 'Failed to load comments', type: 'error' }));
+      setLoadError(getErrorMessage(err, "We couldn't load comments. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -42,16 +49,22 @@ export default function CommentSection({ postId }) {
 
   const submitComment = async (e) => {
     e.preventDefault();
-    if (!commentText.trim()) return;
+    if (!commentText.trim()) {
+      setFieldError('Write a comment before posting.');
+      return;
+    }
+    setFieldError('');
     setSubmitting(true);
     try {
       const { data } = await commentApi.addComment(postId, commentText.trim());
       setComments((prev) => [...prev, data.data]);
       dispatch(incrementCommentCount(postId));
-      dispatch(showToast({ message: 'Comment added successfully', type: 'success' }));
+      dispatch(showToast({ message: 'Comment posted.', type: 'success' }));
       setCommentText('');
     } catch (err) {
-      dispatch(showToast({ message: err.response?.data?.message || 'Failed to add comment', type: 'error' }));
+      const message = getErrorMessage(err, "We couldn't post your comment. Please try again.");
+      if (err.fieldErrors?.content) setFieldError(err.fieldErrors.content);
+      dispatch(showToast({ message, type: 'error' }));
     } finally {
       setSubmitting(false);
     }
@@ -75,29 +88,37 @@ export default function CommentSection({ postId }) {
                 className="form-control _comment_textarea"
                 placeholder="Write a comment..."
                 value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
+                onChange={(e) => {
+                  setCommentText(e.target.value);
+                  if (fieldError && e.target.value.trim()) setFieldError('');
+                }}
                 maxLength={1000}
                 rows={1}
               />
             </div>
           </div>
           <div className="_feed_inner_comment_box_icon">
-            <button
+            <Button
               type="submit"
               className="_feed_inner_text_area_btn_link"
-              disabled={submitting || !commentText.trim()}
-              style={{ padding: '6px 14px' }}
+              loading={submitting}
+              loadingLabel="Posting..."
+              style={{ padding: '6px 14px', minWidth: 72 }}
             >
-              {submitting ? '...' : 'Post'}
-            </button>
+              Post
+            </Button>
           </div>
         </form>
+        {fieldError && <p style={{ color: '#dc2626', fontSize: 13, margin: '6px 0 0 52px' }}>{fieldError}</p>}
       </div>
 
       {/* Comment list */}
       <div className="_timline_comment_main">
         {loading && comments.length === 0 && (
           <p style={{ color: '#888', fontSize: 13, padding: '8px 0' }}>Loading comments...</p>
+        )}
+        {!loading && loadError && comments.length === 0 && (
+          <RetryState message={loadError} onRetry={() => fetchComments(null)} retrying={loading} />
         )}
         {comments.map((c) => (
           <CommentItem key={c._id} comment={c} />
@@ -109,11 +130,11 @@ export default function CommentSection({ postId }) {
             onClick={() => fetchComments(nextCursor)}
             disabled={loading}
           >
-            {loading ? 'Loading...' : 'View more comments'}
+            {loading ? 'Loading comments...' : 'View more comments'}
           </button>
         )}
-        {!loading && loaded && comments.length === 0 && (
-          <p style={{ color: '#888', fontSize: 13, padding: '8px 0' }}>No comments yet. Be the first!</p>
+        {!loading && !loadError && loaded && comments.length === 0 && (
+          <EmptyState heading="No comments yet" subtext="Start the conversation." />
         )}
       </div>
     </div>

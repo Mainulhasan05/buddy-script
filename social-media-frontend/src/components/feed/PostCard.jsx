@@ -7,27 +7,34 @@ import { removePost } from '@/src/store/slices/feedSlice';
 import { postApi } from '@/src/api/post.api';
 import PostActions from '@/src/components/post/PostActions';
 import { showToast } from '@/src/store/slices/uiSlice';
+import ConfirmationModal from '@/src/components/ui/ConfirmationModal';
+import { getErrorMessage } from '@/src/utils/apiError';
 
 export default function PostCard({ post }) {
   const dispatch = useDispatch();
   const currentUser = useSelector((s) => s.auth.user);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const isAuthor = currentUser?.id === post.author._id;
 
   const handleDelete = async () => {
-    if (!confirm('Delete this post?')) return;
+    setDeleting(true);
     try {
       await postApi.deletePost(post._id);
       dispatch(removePost(post._id));
-      dispatch(showToast({ message: 'Post deleted successfully', type: 'success' }));
+      dispatch(showToast({ message: 'Post deleted.', type: 'success' }));
+      setConfirmDelete(false);
     } catch (err) {
       dispatch(
         showToast({
-          message: err.response?.data?.message || 'Failed to delete post',
+          message: getErrorMessage(err, "We couldn't delete that post. Please try again."),
           type: 'error',
         })
       );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -86,7 +93,7 @@ export default function PostCard({ post }) {
                       <button
                         type="button"
                         className="_feed_timeline_dropdown_link"
-                        onClick={() => { handleDelete(); setMenuOpen(false); }}
+                        onClick={() => { setConfirmDelete(true); setMenuOpen(false); }}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}
                       >
                         <span>
@@ -119,6 +126,17 @@ export default function PostCard({ post }) {
 
       {/* Like / Comment actions */}
       <PostActions post={post} />
+      {confirmDelete && (
+        <ConfirmationModal
+          title="Delete post?"
+          message="This post will disappear from your feed. This action cannot be undone."
+          confirmLabel="Delete Post"
+          cancelLabel="Keep Post"
+          loading={deleting}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }

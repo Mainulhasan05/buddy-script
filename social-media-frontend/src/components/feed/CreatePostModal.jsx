@@ -2,11 +2,15 @@
 
 import { useState, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { closeCreatePostModal } from '@/src/store/slices/uiSlice';
+import { closeCreatePostModal, showToast } from '@/src/store/slices/uiSlice';
 import { prependPost, setCreating } from '@/src/store/slices/feedSlice';
 import { postApi } from '@/src/api/post.api';
+import Button from '@/src/components/ui/Button';
+import { getErrorMessage } from '@/src/utils/apiError';
 
 const MAX_CHARS = 2000;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export default function CreatePostModal() {
   const dispatch = useDispatch();
@@ -18,19 +22,32 @@ export default function CreatePostModal() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [error, setError] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileRef = useRef(null);
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setError('Use a JPEG, PNG, or WebP image.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError('That image is too large. Choose an image under 5 MB.');
+      e.target.value = '';
+      return;
+    }
+    setError('');
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!content.trim()) { setError('Post content is required'); return; }
+    if (!content.trim()) { setError('Write something before posting.'); return; }
     setError('');
+    setUploadProgress(0);
     dispatch(setCreating(true));
 
     try {
@@ -39,11 +56,17 @@ export default function CreatePostModal() {
       formData.append('visibility', visibility);
       if (imageFile) formData.append('image', imageFile);
 
-      const { data } = await postApi.createPost(formData);
+      const { data } = await postApi.createPost(formData, {
+        onUploadProgress: (event) => {
+          if (!event.total) return;
+          setUploadProgress(Math.round((event.loaded * 100) / event.total));
+        },
+      });
       dispatch(prependPost(data.data));
+      dispatch(showToast({ message: 'Your post is live.', type: 'success' }));
       dispatch(closeCreatePostModal());
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create post');
+      setError(getErrorMessage(err, "We couldn't publish your post. Please try again."));
       dispatch(setCreating(false));
     }
   };
@@ -125,6 +148,17 @@ export default function CreatePostModal() {
           )}
 
           {error && <p style={{ color: '#e53e3e', fontSize: 13, marginBottom: 8 }}>{error}</p>}
+          {creating && imageFile && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b', marginBottom: 4 }}>
+                <span>Uploading your photo...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 999, background: '#e2e8f0', overflow: 'hidden' }}>
+                <div style={{ width: `${uploadProgress}%`, height: '100%', background: '#377DFF', transition: 'width 0.2s ease' }} />
+              </div>
+            </div>
+          )}
 
           {/* Bottom toolbar */}
           <div className="_feed_inner_text_area_bottom" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -155,16 +189,15 @@ export default function CreatePostModal() {
               </label>
             </div>
 
-            <button
+            <Button
               type="submit"
               className="_feed_inner_text_area_btn_link"
-              disabled={creating || !content.trim()}
+              loading={creating}
+              loadingLabel="Posting..."
+              style={{ padding: '10px 18px', minWidth: 92 }}
             >
-              <svg className="_mar_img" xmlns="http://www.w3.org/2000/svg" width="14" height="13" fill="none" viewBox="0 0 14 13">
-                <path fill="#fff" fillRule="evenodd" d="M6.37 7.879l2.438 3.955a.335.335 0 00.34.162c.068-.01.23-.05.289-.247l3.049-10.297a.348.348 0 00-.09-.35.341.341 0 00-.34-.088L1.75 4.03a.34.34 0 00-.247.289.343.343 0 00.16.347L5.666 7.17 9.2 3.597a.5.5 0 01.712.703L6.37 7.88z" clipRule="evenodd" />
-              </svg>
-              <span>{creating ? 'Posting...' : 'Post'}</span>
-            </button>
+              Post
+            </Button>
           </div>
         </form>
       </div>

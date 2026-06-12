@@ -4,6 +4,10 @@ import { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { closeLikeListModal, showToast } from '@/src/store/slices/uiSlice';
 import { likeApi } from '@/src/api/like.api';
+import Button from '@/src/components/ui/Button';
+import EmptyState from '@/src/components/ui/EmptyState';
+import RetryState from '@/src/components/ui/RetryState';
+import { getErrorMessage } from '@/src/utils/apiError';
 
 export default function LikeList() {
   const dispatch = useDispatch();
@@ -13,6 +17,7 @@ export default function LikeList() {
   const [loading, setLoading] = useState(false);
   const [nextCursor, setNextCursor] = useState(null);
   const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!open || !targetId) return;
@@ -24,18 +29,16 @@ export default function LikeList() {
 
   const fetchLikers = async (cursor) => {
     setLoading(true);
+    setError('');
     try {
       const { data } = await likeApi.getLikers(targetType, targetId, cursor);
       setLikers((prev) => (cursor ? [...prev, ...data.data] : data.data));
       setNextCursor(data.pagination?.nextCursor ?? null);
       setHasMore(data.pagination?.hasMore ?? false);
     } catch (err) {
-      dispatch(
-        showToast({
-          message: err.response?.data?.message || 'Failed to fetch likes list',
-          type: 'error',
-        })
-      );
+      const message = getErrorMessage(err, "We couldn't load the likes. Please try again.");
+      if (cursor) dispatch(showToast({ message, type: 'error' }));
+      else setError(message);
     } finally {
       setLoading(false);
     }
@@ -70,9 +73,11 @@ export default function LikeList() {
         </div>
 
         {loading && likers.length === 0 ? (
-          <p style={{ textAlign: 'center', color: '#888' }}>Loading...</p>
+          <p style={{ textAlign: 'center', color: '#888' }}>Loading likes...</p>
+        ) : error ? (
+          <RetryState message={error} onRetry={() => fetchLikers(null)} retrying={loading} />
         ) : likers.length === 0 ? (
-          <p style={{ textAlign: 'center', color: '#888' }}>No likes yet.</p>
+          <EmptyState heading="No likes yet" subtext="Reactions will appear here." />
         ) : (
           <>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -88,14 +93,16 @@ export default function LikeList() {
               ))}
             </ul>
             {hasMore && (
-              <button
+              <Button
                 type="button"
                 onClick={() => fetchLikers(nextCursor)}
-                disabled={loading}
-                style={{ marginTop: 12, width: '100%', padding: '8px', cursor: 'pointer' }}
+                loading={loading}
+                loadingLabel="Loading likes..."
+                variant="ghost"
+                style={{ marginTop: 12, width: '100%', padding: '8px' }}
               >
-                {loading ? 'Loading...' : 'Load more'}
-              </button>
+                Load more
+              </Button>
             )}
           </>
         )}

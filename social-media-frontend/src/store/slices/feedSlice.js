@@ -2,6 +2,7 @@
 
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { postApi } from '@/src/api/post.api';
+import { getErrorMessage } from '@/src/utils/apiError';
 
 // ─── Async Thunks ────────────────────────────────────────────────────────────
 
@@ -10,7 +11,7 @@ export const fetchFeed = createAsyncThunk('feed/fetchFeed', async (_, { rejectWi
     const { data } = await postApi.getFeed();
     return { posts: data.data, pagination: data.pagination };
   } catch (err) {
-    return rejectWithValue(err.response?.data?.message || 'Failed to load feed');
+    return rejectWithValue(getErrorMessage(err, "We couldn't load your feed. Please try again."));
   }
 });
 
@@ -21,7 +22,7 @@ export const fetchNextPage = createAsyncThunk(
       const { data } = await postApi.getFeed(cursor);
       return { posts: data.data, pagination: data.pagination };
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || 'Failed to load more posts');
+      return rejectWithValue(getErrorMessage(err, "We couldn't load more posts. Please try again."));
     }
   }
 );
@@ -33,6 +34,7 @@ const initialState = {
   nextCursor: null,
   hasMore: true,
   loading: false,
+  loadingMore: false,
   creating: false,
   error: null,
 };
@@ -65,6 +67,7 @@ const feedSlice = createSlice({
       state.nextCursor = null;
       state.hasMore = true;
       state.loading = false;
+      state.loadingMore = false;
       state.error = null;
     },
   },
@@ -88,17 +91,18 @@ const feedSlice = createSlice({
       })
       // fetchNextPage
       .addCase(fetchNextPage.pending, (state) => {
-        state.loading = true;
+        state.loadingMore = true;
+        state.error = null;
       })
       .addCase(fetchNextPage.fulfilled, (state, action) => {
         const { posts, pagination } = action.payload;
         state.posts.push(...posts);
         state.nextCursor = pagination?.nextCursor ?? null;
         state.hasMore = pagination?.hasMore ?? false;
-        state.loading = false;
+        state.loadingMore = false;
       })
       .addCase(fetchNextPage.rejected, (state, action) => {
-        state.loading = false;
+        state.loadingMore = false;
         state.error = action.payload;
       });
   },

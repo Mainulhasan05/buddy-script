@@ -9,9 +9,10 @@ export const postApi = {
 
   getPost: (postId) => axiosInstance.get(`/posts/${postId}`),
 
-  createPost: (formData) =>
+  createPost: (formData, config = {}) =>
     axiosInstance.post('/posts', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      ...config,
     }),
 
   deletePost: (postId) => axiosInstance.delete(`/posts/${postId}`),

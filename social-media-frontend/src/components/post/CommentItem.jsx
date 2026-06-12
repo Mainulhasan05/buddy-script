@@ -5,6 +5,10 @@ import { useDispatch } from 'react-redux';
 import { commentApi } from '@/src/api/comment.api';
 import LikeButton from './LikeButton';
 import { showToast } from '@/src/store/slices/uiSlice';
+import Button from '@/src/components/ui/Button';
+import EmptyState from '@/src/components/ui/EmptyState';
+import InlineSpinner from '@/src/components/ui/InlineSpinner';
+import { getErrorMessage } from '@/src/utils/apiError';
 
 export default function CommentItem({ comment }) {
   const dispatch = useDispatch();
@@ -12,16 +16,20 @@ export default function CommentItem({ comment }) {
   const [replies, setReplies] = useState([]);
   const [replyText, setReplyText] = useState('');
   const [replyLoading, setReplyLoading] = useState(false);
+  const [repliesLoading, setRepliesLoading] = useState(false);
+  const [moreRepliesLoading, setMoreRepliesLoading] = useState(false);
   const [repliesLoaded, setRepliesLoaded] = useState(false);
   const [repliesCursor, setRepliesCursor] = useState(null);
   const [repliesHasMore, setRepliesHasMore] = useState(false);
   const [replyCount, setReplyCount] = useState(comment.replyCount || 0);
+  const [replyError, setReplyError] = useState('');
 
   const loadReplies = async () => {
     if (repliesLoaded) {
       setShowReplies((v) => !v);
       return;
     }
+    setRepliesLoading(true);
     try {
       const { data } = await commentApi.getReplies(comment._id);
       setReplies(data.data);
@@ -32,14 +40,17 @@ export default function CommentItem({ comment }) {
     } catch (err) {
       dispatch(
         showToast({
-          message: err.response?.data?.message || 'Failed to load replies',
+          message: getErrorMessage(err, "We couldn't load replies. Please try again."),
           type: 'error',
         })
       );
+    } finally {
+      setRepliesLoading(false);
     }
   };
 
   const loadMoreReplies = async () => {
+    setMoreRepliesLoading(true);
     try {
       const { data } = await commentApi.getReplies(comment._id, repliesCursor);
       setReplies((prev) => [...prev, ...data.data]);
@@ -48,28 +59,34 @@ export default function CommentItem({ comment }) {
     } catch (err) {
       dispatch(
         showToast({
-          message: err.response?.data?.message || 'Failed to load more replies',
+          message: getErrorMessage(err, "We couldn't load more replies. Please try again."),
           type: 'error',
         })
       );
+    } finally {
+      setMoreRepliesLoading(false);
     }
   };
 
   const submitReply = async (e) => {
     e.preventDefault();
-    if (!replyText.trim()) return;
+    if (!replyText.trim()) {
+      setReplyError('Write a reply before posting.');
+      return;
+    }
+    setReplyError('');
     setReplyLoading(true);
     try {
       const { data } = await commentApi.addReply(comment._id, replyText.trim());
       setReplies((prev) => [...prev, data.data]);
       setReplyCount((c) => c + 1);
-      dispatch(showToast({ message: 'Reply posted successfully', type: 'success' }));
+      dispatch(showToast({ message: 'Reply posted.', type: 'success' }));
       setReplyText('');
       setShowReplies(true);
     } catch (err) {
       dispatch(
         showToast({
-          message: err.response?.data?.message || 'Failed to post reply',
+          message: getErrorMessage(err, "We couldn't post your reply. Please try again."),
           type: 'error',
         })
       );
@@ -112,7 +129,9 @@ export default function CommentItem({ comment }) {
                 onClick={loadReplies}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#666' }}
               >
-                {replyCount > 0
+                {repliesLoading
+                  ? 'Loading replies...'
+                  : replyCount > 0
                   ? `${showReplies ? 'Hide' : 'View'} ${replyCount} repl${replyCount === 1 ? 'y' : 'ies'}`
                   : 'Reply'}
               </button>
@@ -122,16 +141,26 @@ export default function CommentItem({ comment }) {
 
         {showReplies && (
           <div style={{ marginTop: 12, paddingLeft: 16 }}>
+            {repliesLoading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 13, padding: '8px 0' }}>
+                <InlineSpinner />
+                <span>Loading replies...</span>
+              </div>
+            )}
             {replies.map((r) => (
               <CommentItem key={r._id} comment={r} />
             ))}
+            {!repliesLoading && repliesLoaded && replies.length === 0 && replyCount > 0 && (
+              <EmptyState heading="No replies yet" subtext="Reply to keep the conversation going." />
+            )}
             {repliesHasMore && (
               <button
                 type="button"
                 onClick={loadMoreReplies}
+                disabled={moreRepliesLoading}
                 style={{ fontSize: 13, color: '#377DFF', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8 }}
               >
-                Load more replies
+                {moreRepliesLoading ? 'Loading replies...' : 'Load more replies'}
               </button>
             )}
             {comment.depth === 0 && (
@@ -139,22 +168,27 @@ export default function CommentItem({ comment }) {
                 <input
                   type="text"
                   value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
+                  onChange={(e) => {
+                    setReplyText(e.target.value);
+                    if (replyError && e.target.value.trim()) setReplyError('');
+                  }}
                   placeholder="Write a reply..."
                   maxLength={1000}
                   className="form-control _comment_textarea"
                   style={{ flex: 1 }}
                 />
-                <button
+                <Button
                   type="submit"
                   className="_feed_inner_text_area_btn_link"
-                  disabled={replyLoading || !replyText.trim()}
-                  style={{ padding: '6px 14px', whiteSpace: 'nowrap' }}
+                  loading={replyLoading}
+                  loadingLabel="Replying..."
+                  style={{ padding: '6px 14px', whiteSpace: 'nowrap', minWidth: 78 }}
                 >
-                  {replyLoading ? '...' : 'Reply'}
-                </button>
+                  Reply
+                </Button>
               </form>
             )}
+            {replyError && <p style={{ color: '#dc2626', fontSize: 13, marginTop: 6 }}>{replyError}</p>}
           </div>
         )}
       </div>

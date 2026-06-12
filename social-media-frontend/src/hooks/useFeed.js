@@ -6,7 +6,7 @@ import { fetchFeed, fetchNextPage } from '@/src/store/slices/feedSlice';
 
 export function useFeed() {
   const dispatch = useDispatch();
-  const { posts, nextCursor, hasMore, loading, error } = useSelector((s) => s.feed);
+  const { posts, nextCursor, hasMore, loading, loadingMore, error } = useSelector((s) => s.feed);
 
   useEffect(() => {
     if (posts.length === 0) {
@@ -15,10 +15,12 @@ export function useFeed() {
   }, [dispatch, posts.length]);
 
   const loadMore = () => {
-    if (!loading && hasMore && nextCursor) {
+    if (!loading && !loadingMore && hasMore && nextCursor) {
       dispatch(fetchNextPage(nextCursor));
     }
   };
 
-  return { posts, nextCursor, hasMore, loading, error, loadMore };
+  const retry = () => dispatch(fetchFeed());
+
+  return { posts, nextCursor, hasMore, loading, loadingMore, error, loadMore, retry };
 }

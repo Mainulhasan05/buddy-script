@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { likeApi } from '@/src/api/like.api';
 import { showToast } from '@/src/store/slices/uiSlice';
+import { getErrorMessage } from '@/src/utils/apiError';
 
 export function useOptimisticLike({ targetId, targetType, initialLiked, initialCount }) {
   const dispatch = useDispatch();
@@ -30,7 +31,7 @@ export function useOptimisticLike({ targetId, targetType, initialLiked, initialC
       setCount((prev) => (isLiked ? prev + 1 : prev - 1));
       dispatch(
         showToast({
-          message: err.response?.data?.message || 'Failed to update reaction',
+          message: getErrorMessage(err, "We couldn't update your reaction. Please try again."),
           type: 'error',
         })
       );
