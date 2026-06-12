@@ -20,6 +20,7 @@ const createNoopRedis = () => ({
   sismember: async () => 0,
   srem: async () => 0,
   scan: async () => ['0', []],
+  expire: async () => 1,
   status: 'noop',
 });
 

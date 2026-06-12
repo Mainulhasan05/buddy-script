@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const User = require('../models/User.model');
 const RefreshToken = require('../models/RefreshToken.model');
 const { signAccessToken, signRefreshToken, verifyRefreshToken, hashToken } = require('../utils/jwt.util');
@@ -22,7 +23,11 @@ const REFRESH_COOKIE_OPTIONS = {
  * Also sets the httpOnly cookie on the response.
  */
 const issueTokens = async (user, res, meta = {}) => {
-  const payload = { id: user._id.toString(), email: user.email };
+  const payload = {
+    id: user._id.toString(),
+    email: user.email,
+    jti: crypto.randomUUID(),
+  };
 
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
