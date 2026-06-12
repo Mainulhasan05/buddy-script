@@ -97,7 +97,7 @@ export default function Navbar() {
 
             {dropdownOpen && (
               <div
-                className="_nav_profile_dropdown _profile_dropdown"
+                className="_nav_profile_dropdown _profile_dropdown show"
                 style={{ display: 'block' }}
                 onClick={(e) => e.stopPropagation()}
               >

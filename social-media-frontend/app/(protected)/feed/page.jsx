@@ -83,7 +83,9 @@ export default function FeedPage() {
 
               {/* Feed Content */}
               <div className="col-xl-6 col-lg-6 col-md-12 col-sm-12">
-                <FeedContainer />
+                <div className="_layout_middle_wrap">
+                  <FeedContainer />
+                </div>
               </div>
 
               {/* Right Sidebar */}

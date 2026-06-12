@@ -54,9 +54,12 @@ const feedSlice = createSlice({
       state.posts = state.posts.filter((p) => p._id !== action.payload);
     },
     updatePostLikeCount(state, action) {
-      const { postId, likeCount } = action.payload;
+      const { postId, likeCount, isLiked } = action.payload;
       const post = state.posts.find((p) => p._id === postId);
-      if (post) post.likeCount = likeCount;
+      if (post) {
+        post.likeCount = likeCount;
+        if (isLiked !== undefined) post.isLiked = isLiked;
+      }
     },
     incrementCommentCount(state, action) {
       const post = state.posts.find((p) => p._id === action.payload);
