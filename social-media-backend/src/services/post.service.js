@@ -9,6 +9,13 @@ const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
 const { buildCursorQuery, encodeCursor } = require('../utils/pagination.util');
 const logger = require('../utils/logger');
 
+// Fields returned in feed/list views (excludes internals like image.publicId)
+const POST_LIST_PROJECTION = '_id author content image.url image.width image.height visibility likeCount commentCount createdAt';
+// Fields returned in single post view (includes full content)
+const POST_DETAIL_PROJECTION = POST_LIST_PROJECTION;
+// Fields needed from User for author snapshot
+const USER_SNAPSHOT_PROJECTION = '_id firstName lastName avatar.url';
+
 /**
  * Create a new post.
  * Uploads image (if present), saves post, publishes post.created event,
@@ -16,7 +23,7 @@ const logger = require('../utils/logger');
  */
 const createPost = async ({ userId, content, file, visibility = 'public' }) => {
   // Fetch author snapshot — denormalized onto the post to avoid future lookups
-  const user = await User.findById(userId).lean();
+  const user = await User.findById(userId).select(USER_SNAPSHOT_PROJECTION).lean();
   if (!user) {
     const err = new Error('User not found');
     err.statusCode = 404;
@@ -53,6 +60,7 @@ const createPost = async ({ userId, content, file, visibility = 'public' }) => {
 
 /**
  * Get paginated public feed (cache-first).
+ * N+1 eliminated: isLiked resolved with a single batch query.
  */
 const getFeed = async ({ cursor, limit = 20, userId }) => {
   limit = Math.min(Number(limit), 50); // cap at 50
@@ -67,8 +75,9 @@ const getFeed = async ({ cursor, limit = 20, userId }) => {
     const posts = await Post.find({
       ...cursorQuery,
       visibility: 'public',
-      isDeleted: false,
+      deletedAt: null,
     })
+      .select(POST_LIST_PROJECTION)
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit + 1)
       .lean();
@@ -82,19 +91,18 @@ const getFeed = async ({ cursor, limit = 20, userId }) => {
     await cacheService.set(cacheKey, result, CACHE_TTL.FEED);
   }
 
-  // Populate isLiked for this user
+  // Batch resolve isLiked — single $in query instead of N+1
   if (userId && result.posts.length > 0) {
-    const postsWithLikes = await Promise.all(
-      result.posts.map(async (post) => {
-        const isLiked = await likeService.getLikeState({
-          userId,
-          targetId: post._id,
-          targetType: 'post',
-        });
-        return { ...post, isLiked };
-      })
-    );
-    result.posts = postsWithLikes;
+    const postIds = result.posts.map((p) => p._id);
+    const likedSet = await likeService.getBatchLikeState({
+      userId,
+      targetIds: postIds,
+      targetType: 'post',
+    });
+    result.posts = result.posts.map((post) => ({
+      ...post,
+      isLiked: likedSet.has(post._id.toString()),
+    }));
   }
 
   return result;
@@ -112,7 +120,9 @@ const getPost = async (postId, requesterId) => {
   if (cached) {
     post = JSON.parse(JSON.stringify(cached));
   } else {
-    post = await Post.findOne({ _id: postId, isDeleted: false }).lean();
+    post = await Post.findOne({ _id: postId, deletedAt: null })
+      .select(POST_DETAIL_PROJECTION)
+      .lean();
     if (!post) {
       const err = new Error('Post not found');
       err.statusCode = 404;
@@ -130,7 +140,7 @@ const getPost = async (postId, requesterId) => {
     throw err;
   }
 
-  // Populate isLiked
+  // Populate isLiked (single item — acceptable for detail view)
   if (requesterId) {
     post.isLiked = await likeService.getLikeState({
       userId: requesterId,
@@ -144,9 +154,12 @@ const getPost = async (postId, requesterId) => {
 
 /**
  * Soft-delete a post. Only the author can delete their own post.
+ * Uses $set: { deletedAt: new Date() } instead of boolean flag.
  */
 const deletePost = async ({ postId, userId }) => {
-  const post = await Post.findOne({ _id: postId, isDeleted: false });
+  const post = await Post.findOne({ _id: postId, deletedAt: null })
+    .select('_id author._id')
+    .lean();
   if (!post) {
     const err = new Error('Post not found');
     err.statusCode = 404;
@@ -161,8 +174,7 @@ const deletePost = async ({ postId, userId }) => {
     throw err;
   }
 
-  post.isDeleted = true;
-  await post.save();
+  await Post.updateOne({ _id: postId }, { $set: { deletedAt: new Date() } });
 
   // Invalidate caches for this post and the feed
   await Promise.all([
@@ -173,6 +185,7 @@ const deletePost = async ({ postId, userId }) => {
 
 /**
  * Get the authenticated user's own posts (both public and private), cursor-paginated.
+ * N+1 eliminated: isLiked resolved with a single batch query.
  */
 const getMyPosts = async ({ userId, cursor, limit = 20 }) => {
   limit = Math.min(Number(limit), 50);
@@ -181,8 +194,9 @@ const getMyPosts = async ({ userId, cursor, limit = 20 }) => {
   const posts = await Post.find({
     ...cursorQuery,
     'author._id': userId,
-    isDeleted: false,
+    deletedAt: null,
   })
+    .select(POST_LIST_PROJECTION)
     .sort({ createdAt: -1, _id: -1 })
     .limit(limit + 1)
     .lean();
@@ -191,19 +205,20 @@ const getMyPosts = async ({ userId, cursor, limit = 20 }) => {
   if (hasMore) posts.pop();
   const nextCursor = hasMore ? encodeCursor(posts[posts.length - 1]) : null;
 
-  // Populate isLiked for this user
-  const postsWithLikes = await Promise.all(
-    posts.map(async (post) => {
-      const isLiked = await likeService.getLikeState({
-        userId,
-        targetId: post._id,
-        targetType: 'post',
-      });
-      return { ...post, isLiked };
-    })
-  );
+  // Batch resolve isLiked — single $in query instead of N+1
+  const postIds = posts.map((p) => p._id);
+  const likedSet = await likeService.getBatchLikeState({
+    userId,
+    targetIds: postIds,
+    targetType: 'post',
+  });
+  const postsWithLikes = posts.map((post) => ({
+    ...post,
+    isLiked: likedSet.has(post._id.toString()),
+  }));
 
   return { posts: postsWithLikes, pagination: { nextCursor, hasMore } };
 };
 
 module.exports = { createPost, getFeed, getPost, deletePost, getMyPosts };
+

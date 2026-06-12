@@ -46,16 +46,30 @@ const commentSchema = new Schema(
     likeCount: { type: Number, default: 0, min: 0 },
     // Only meaningful on depth-0 comments; ignored on replies
     replyCount: { type: Number, default: 0, min: 0 },
-    isDeleted: { type: Boolean, default: false },
+    // Soft delete — null means active, Date means deleted (with timestamp for audit trail)
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
-// Indexes
-commentSchema.index({ postId: 1, parentId: 1, createdAt: 1 }); // fetch top-level comments or replies
-commentSchema.index({ postId: 1, depth: 1, createdAt: 1 });    // filter by depth
+// ── Indexes ──────────────────────────────────────────────────────────────────
+// Top-level comments for a post: { postId, parentId: null, deletedAt: null } sorted by { createdAt, _id }
+commentSchema.index({ postId: 1, parentId: 1, deletedAt: 1, createdAt: 1, _id: 1 });
+
+// Replies for a comment: { parentId: commentId, deletedAt: null } sorted by { createdAt, _id }
+// parentId as first field — prevents COLLSCAN on getReplies
+commentSchema.index({ parentId: 1, deletedAt: 1, createdAt: 1, _id: 1 });
+
+// User's comment history
 commentSchema.index({ 'author._id': 1 });
+
+// Partial index for soft-deleted comments (admin/cleanup queries)
+commentSchema.index(
+  { deletedAt: 1 },
+  { partialFilterExpression: { deletedAt: { $ne: null } }, sparse: true }
+);
 
 const Comment = mongoose.model('Comment', commentSchema);
 
 module.exports = Comment;
+

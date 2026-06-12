@@ -9,8 +9,12 @@ const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
 const { buildCursorQuery, encodeCursor } = require('../utils/pagination.util');
 const logger = require('../utils/logger');
 
+// Projections
+const COMMENT_PROJECTION = '_id postId parentId depth author content likeCount replyCount createdAt';
+const USER_SNAPSHOT_PROJECTION = '_id firstName lastName avatar.url';
+
 const fetchUserSnap = async (userId) => {
-  const user = await User.findById(userId).lean();
+  const user = await User.findById(userId).select(USER_SNAPSHOT_PROJECTION).lean();
   if (!user) {
     const err = new Error('User not found');
     err.statusCode = 404;
@@ -29,7 +33,9 @@ const fetchUserSnap = async (userId) => {
  * Add a top-level comment (depth=0) to a post.
  */
 const addComment = async ({ postId, userId, content }) => {
-  const post = await Post.findOne({ _id: postId, isDeleted: false }).lean();
+  const post = await Post.findOne({ _id: postId, deletedAt: null })
+    .select('_id')
+    .lean();
   if (!post) {
     const err = new Error('Post not found');
     err.statusCode = 404;
@@ -69,7 +75,9 @@ const addComment = async ({ postId, userId, content }) => {
  * Max depth is 1 — replies to replies are rejected.
  */
 const addReply = async ({ commentId, userId, content }) => {
-  const parent = await Comment.findOne({ _id: commentId, isDeleted: false }).lean();
+  const parent = await Comment.findOne({ _id: commentId, deletedAt: null })
+    .select('_id postId depth')
+    .lean();
   if (!parent) {
     const err = new Error('Comment not found');
     err.statusCode = 404;
@@ -109,6 +117,7 @@ const addReply = async ({ commentId, userId, content }) => {
 
 /**
  * Get top-level comments for a post (parentId=null), cursor-paginated, cache-first.
+ * N+1 eliminated: isLiked resolved with a single batch query.
  */
 const getComments = async ({ postId, cursor, limit = 20, userId }) => {
   limit = Math.min(Number(limit), 50);
@@ -125,8 +134,9 @@ const getComments = async ({ postId, cursor, limit = 20, userId }) => {
       ...cursorQuery,
       postId,
       parentId: null,
-      isDeleted: false,
+      deletedAt: null,
     })
+      .select(COMMENT_PROJECTION)
       .sort({ createdAt: 1, _id: 1 })
       .limit(limit + 1)
       .lean();
@@ -139,19 +149,18 @@ const getComments = async ({ postId, cursor, limit = 20, userId }) => {
     await cacheService.set(cacheKey, result, CACHE_TTL.COMMENTS);
   }
 
-  // Populate isLiked for comments
+  // Batch resolve isLiked — single $in query instead of N+1
   if (userId && result.comments.length > 0) {
-    const commentsWithLikes = await Promise.all(
-      result.comments.map(async (comment) => {
-        const isLiked = await likeService.getLikeState({
-          userId,
-          targetId: comment._id,
-          targetType: 'comment',
-        });
-        return { ...comment, isLiked };
-      })
-    );
-    result.comments = commentsWithLikes;
+    const commentIds = result.comments.map((c) => c._id);
+    const likedSet = await likeService.getBatchLikeState({
+      userId,
+      targetIds: commentIds,
+      targetType: 'comment',
+    });
+    result.comments = result.comments.map((comment) => ({
+      ...comment,
+      isLiked: likedSet.has(comment._id.toString()),
+    }));
   }
 
   return result;
@@ -159,6 +168,7 @@ const getComments = async ({ postId, cursor, limit = 20, userId }) => {
 
 /**
  * Get replies for a comment (parentId=commentId), cursor-paginated.
+ * N+1 eliminated: isLiked resolved with a single batch query.
  */
 const getReplies = async ({ commentId, cursor, limit = 10, userId }) => {
   limit = Math.min(Number(limit), 50);
@@ -167,8 +177,9 @@ const getReplies = async ({ commentId, cursor, limit = 10, userId }) => {
   const replies = await Comment.find({
     ...cursorQuery,
     parentId: commentId,
-    isDeleted: false,
+    deletedAt: null,
   })
+    .select(COMMENT_PROJECTION)
     .sort({ createdAt: 1, _id: 1 })
     .limit(limit + 1)
     .lean();
@@ -177,22 +188,23 @@ const getReplies = async ({ commentId, cursor, limit = 10, userId }) => {
   if (hasMore) replies.pop();
   const nextCursor = hasMore ? encodeCursor(replies[replies.length - 1]) : null;
 
-  // Populate isLiked for replies
+  // Batch resolve isLiked — single $in query instead of N+1
   let repliesWithLikes = replies;
   if (userId && replies.length > 0) {
-    repliesWithLikes = await Promise.all(
-      replies.map(async (reply) => {
-        const isLiked = await likeService.getLikeState({
-          userId,
-          targetId: reply._id,
-          targetType: 'comment',
-        });
-        return { ...reply, isLiked };
-      })
-    );
+    const replyIds = replies.map((r) => r._id);
+    const likedSet = await likeService.getBatchLikeState({
+      userId,
+      targetIds: replyIds,
+      targetType: 'comment',
+    });
+    repliesWithLikes = replies.map((reply) => ({
+      ...reply,
+      isLiked: likedSet.has(reply._id.toString()),
+    }));
   }
 
   return { replies: repliesWithLikes, pagination: { nextCursor, hasMore } };
 };
 
 module.exports = { addComment, addReply, getComments, getReplies };
+

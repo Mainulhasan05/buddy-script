@@ -15,6 +15,7 @@ const CACHE_TTL = {
   FEED: 60,       // 60 seconds
   POST: 300,      // 5 minutes
   COMMENTS: 120,  // 2 minutes
+  LIKES: 86400,   // 24 hours — like state sets expire and rebuild from DB on miss
 };
 
 module.exports = { CACHE_KEYS, CACHE_TTL };

@@ -2,21 +2,29 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const env = require('../config/env');
 
+const JWT_ALGORITHM = 'HS256';
+
 const signAccessToken = (payload) => {
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: env.JWT_ACCESS_EXPIRES });
+  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+    expiresIn: env.JWT_ACCESS_EXPIRES,
+    algorithm: JWT_ALGORITHM,
+  });
 };
 
 const signRefreshToken = (payload) => {
-  return jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRES });
+  return jwt.sign(payload, env.JWT_REFRESH_SECRET, {
+    expiresIn: env.JWT_REFRESH_EXPIRES,
+    algorithm: JWT_ALGORITHM,
+  });
 };
 
 const verifyAccessToken = (token) => {
-  // Throws JsonWebTokenError or TokenExpiredError on failure
-  return jwt.verify(token, env.JWT_ACCESS_SECRET);
+  // Explicitly restrict algorithms — prevents 'none' algorithm confusion attack
+  return jwt.verify(token, env.JWT_ACCESS_SECRET, { algorithms: [JWT_ALGORITHM] });
 };
 
 const verifyRefreshToken = (token) => {
-  return jwt.verify(token, env.JWT_REFRESH_SECRET);
+  return jwt.verify(token, env.JWT_REFRESH_SECRET, { algorithms: [JWT_ALGORITHM] });
 };
 
 /**
@@ -28,3 +36,4 @@ const hashToken = (token) => {
 };
 
 module.exports = { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken, hashToken };
+

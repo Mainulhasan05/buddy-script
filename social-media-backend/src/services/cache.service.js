@@ -1,4 +1,4 @@
-const { redis } = require('../config/redis');
+const { getRedis } = require('../config/redis');
 const logger = require('../utils/logger');
 
 /**
@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
  */
 const get = async (key) => {
   try {
-    const data = await redis.get(key);
+    const data = await getRedis().get(key);
     return data ? JSON.parse(data) : null;
   } catch (err) {
     logger.error(`Cache GET error [${key}]: ${err.message}`);
@@ -20,7 +20,7 @@ const get = async (key) => {
  */
 const set = async (key, data, ttlSeconds) => {
   try {
-    await redis.set(key, JSON.stringify(data), 'EX', ttlSeconds);
+    await getRedis().set(key, JSON.stringify(data), 'EX', ttlSeconds);
   } catch (err) {
     logger.error(`Cache SET error [${key}]: ${err.message}`);
   }
@@ -31,7 +31,7 @@ const set = async (key, data, ttlSeconds) => {
  */
 const del = async (...keys) => {
   try {
-    if (keys.length) await redis.del(...keys);
+    if (keys.length) await getRedis().del(...keys);
   } catch (err) {
     logger.error(`Cache DEL error [${keys}]: ${err.message}`);
   }
@@ -39,10 +39,14 @@ const del = async (...keys) => {
 
 /**
  * Add a member to a Redis Set (used for like state tracking).
+ * Optionally sets a TTL on the key (seconds) to prevent unbounded growth.
  */
-const sAdd = async (key, member) => {
+const sAdd = async (key, member, ttlSeconds) => {
   try {
-    await redis.sadd(key, member);
+    await getRedis().sadd(key, member);
+    if (ttlSeconds) {
+      await getRedis().expire(key, ttlSeconds);
+    }
   } catch (err) {
     logger.error(`Cache SADD error [${key}]: ${err.message}`);
   }
@@ -54,7 +58,7 @@ const sAdd = async (key, member) => {
  */
 const sIsMember = async (key, member) => {
   try {
-    const result = await redis.sismember(key, member);
+    const result = await getRedis().sismember(key, member);
     return result === 1;
   } catch (err) {
     logger.error(`Cache SISMEMBER error [${key}]: ${err.message}`);
@@ -67,7 +71,7 @@ const sIsMember = async (key, member) => {
  */
 const sRem = async (key, member) => {
   try {
-    await redis.srem(key, member);
+    await getRedis().srem(key, member);
   } catch (err) {
     logger.error(`Cache SREM error [${key}]: ${err.message}`);
   }
@@ -81,9 +85,9 @@ const scanDel = async (pattern) => {
   try {
     let cursor = '0';
     do {
-      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+      const [nextCursor, keys] = await getRedis().scan(cursor, 'MATCH', pattern, 'COUNT', 100);
       cursor = nextCursor;
-      if (keys.length) await redis.del(...keys);
+      if (keys.length) await getRedis().del(...keys);
     } while (cursor !== '0');
   } catch (err) {
     logger.error(`Cache SCAN DEL error [${pattern}]: ${err.message}`);
@@ -91,3 +95,4 @@ const scanDel = async (pattern) => {
 };
 
 module.exports = { get, set, del, sAdd, sIsMember, sRem, scanDel };
+

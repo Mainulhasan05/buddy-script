@@ -5,40 +5,49 @@ const Comment = require('../models/Comment.model');
 const cacheService = require('./cache.service');
 const { publish } = require('../config/rabbitmq');
 const { ROUTING_KEYS } = require('../constants/queue.constants');
-const { CACHE_KEYS } = require('../constants/cache.constants');
+const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
 const logger = require('../utils/logger');
 
 /**
  * Toggle like on a post or comment.
- * Write to likes collection → publish RabbitMQ event → update Redis set.
- * Returns optimistic { isLiked, likeCount }.
+ * Uses atomic operations to prevent race conditions at high concurrency.
+ * Returns { isLiked, delta } — the frontend already does optimistic count updates.
  */
 const toggle = async ({ userId, targetId, targetType }) => {
-  const existing = await Like.findOne({ userId, targetId, targetType });
+  // Attempt atomic delete first — if a like exists, remove it
+  const deleted = await Like.findOneAndDelete({ userId, targetId, targetType });
 
-  let isLiked;
-  let delta;
+  if (deleted) {
+    // Unlike — document was removed
+    // Atomically decrement the parent counter
+    const Model = targetType === 'post' ? Post : Comment;
+    await Model.updateOne({ _id: targetId }, { $inc: { likeCount: -1 } });
 
-  if (existing) {
-    // Unlike
-    await Like.deleteOne({ _id: existing._id });
-    isLiked = false;
-    delta = -1;
     await cacheService.sRem(CACHE_KEYS.LIKES(targetType, targetId), userId.toString());
     publish(ROUTING_KEYS.LIKE_DELETED, { targetId: targetId.toString(), targetType, delta: -1 });
-  } else {
-    // Like
-    await Like.create({ userId, targetId, targetType });
-    isLiked = true;
-    delta = 1;
-    await cacheService.sAdd(CACHE_KEYS.LIKES(targetType, targetId), userId.toString());
-    publish(ROUTING_KEYS.LIKE_CREATED, { targetId: targetId.toString(), targetType, delta: 1 });
+
+    return { isLiked: false, delta: -1 };
   }
 
-  // Optimistic count — read from DB (worker will sync async)
-  const likeCount = await Like.countDocuments({ targetId, targetType });
+  // Like — create new document (unique index prevents duplicates)
+  try {
+    await Like.create({ userId, targetId, targetType });
+  } catch (err) {
+    // Duplicate key error (11000) — user already liked (race condition handled gracefully)
+    if (err.code === 11000) {
+      return { isLiked: true, delta: 0 };
+    }
+    throw err;
+  }
 
-  return { isLiked, likeCount };
+  // Atomically increment the parent counter
+  const Model = targetType === 'post' ? Post : Comment;
+  await Model.updateOne({ _id: targetId }, { $inc: { likeCount: 1 } });
+
+  await cacheService.sAdd(CACHE_KEYS.LIKES(targetType, targetId), userId.toString(), CACHE_TTL.LIKES);
+  publish(ROUTING_KEYS.LIKE_CREATED, { targetId: targetId.toString(), targetType, delta: 1 });
+
+  return { isLiked: true, delta: 1 };
 };
 
 /**
@@ -99,7 +108,7 @@ const getLikers = async ({ targetId, targetType, cursor, limit = 20 }) => {
 };
 
 /**
- * Check if a user has liked a target.
+ * Check if a user has liked a target (single item — used for individual post views).
  * Redis SISMEMBER first — DB fallback on cache miss.
  */
 const getLikeState = async ({ userId, targetId, targetType }) => {
@@ -113,11 +122,34 @@ const getLikeState = async ({ userId, targetId, targetType }) => {
   const exists = await Like.exists({ userId, targetId, targetType });
   if (exists) {
     // Back-populate Redis for future checks
-    await cacheService.sAdd(cacheKey, userId.toString());
+    await cacheService.sAdd(cacheKey, userId.toString(), CACHE_TTL.LIKES);
     return true;
   }
 
   return false;
 };
 
-module.exports = { toggle, getLikers, getLikeState };
+/**
+ * Batch check if a user has liked multiple targets — eliminates N+1 queries.
+ * Returns a Set of targetId strings that the user has liked.
+ *
+ * Usage:
+ *   const likedSet = await getBatchLikeState({ userId, targetIds: postIds, targetType: 'post' });
+ *   posts.forEach(p => p.isLiked = likedSet.has(p._id.toString()));
+ */
+const getBatchLikeState = async ({ userId, targetIds, targetType }) => {
+  if (!userId || !targetIds.length) return new Set();
+
+  const likes = await Like.find({
+    userId,
+    targetId: { $in: targetIds },
+    targetType,
+  })
+    .select('targetId')
+    .lean();
+
+  return new Set(likes.map((l) => l.targetId.toString()));
+};
+
+module.exports = { toggle, getLikers, getLikeState, getBatchLikeState };
+

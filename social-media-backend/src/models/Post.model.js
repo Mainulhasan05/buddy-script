@@ -39,17 +39,26 @@ const postSchema = new Schema(
     // Denormalized counters — async-updated by RabbitMQ workers
     likeCount: { type: Number, default: 0, min: 0 },
     commentCount: { type: Number, default: 0, min: 0 },
-    isDeleted: { type: Boolean, default: false },
+    // Soft delete — null means active, Date means deleted (with timestamp for audit trail)
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
-// Indexes designed around actual query patterns
-postSchema.index({ visibility: 1, isDeleted: 1, createdAt: -1 });        // public feed
-postSchema.index({ 'author._id': 1, visibility: 1, createdAt: -1 });     // user's own posts
-postSchema.index({ createdAt: -1, _id: -1 });                            // cursor pagination
-postSchema.index({ isDeleted: 1, visibility: 1, _id: -1 });              // compound cursor fallback
+// ── Indexes ──────────────────────────────────────────────────────────────────
+// Feed query: { deletedAt: null, visibility: 'public' } sorted by { createdAt: -1, _id: -1 }
+postSchema.index({ deletedAt: 1, visibility: 1, createdAt: -1, _id: -1 });
+
+// User's own posts: { 'author._id': userId, deletedAt: null } sorted by { createdAt: -1 }
+postSchema.index({ 'author._id': 1, deletedAt: 1, createdAt: -1, _id: -1 });
+
+// Partial index for soft-deleted documents — only indexes deleted posts (small, for admin queries)
+postSchema.index(
+  { deletedAt: 1 },
+  { partialFilterExpression: { deletedAt: { $ne: null } }, sparse: true }
+);
 
 const Post = mongoose.model('Post', postSchema);
 
 module.exports = Post;
+

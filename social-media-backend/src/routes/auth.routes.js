@@ -7,19 +7,29 @@ const { registerSchema, loginSchema } = require('../validators/auth.validator');
 
 const router = Router();
 
-// Stricter rate limit for auth endpoints — 5 attempts per 15 min per IP
-const authLimiter = rateLimit({
+// Login rate limit — 10 attempts per 15 min per IP
+const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts, please try again later.', code: 'RATE_LIMITED' },
+});
+
+// Register rate limit — 5 attempts per 1 hour per IP
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many attempts, please try again later.', code: 'RATE_LIMITED' },
+  message: { success: false, message: 'Too many registration attempts, please try again later.', code: 'RATE_LIMITED' },
 });
 
-router.post('/register', authLimiter, validate(registerSchema), authController.register);
-router.post('/login', authLimiter, validate(loginSchema), authController.login);
+router.post('/register', registerLimiter, validate(registerSchema), authController.register);
+router.post('/login', loginLimiter, validate(loginSchema), authController.login);
 router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
 router.get('/me', authenticate, authController.getMe);
 
 module.exports = router;
+

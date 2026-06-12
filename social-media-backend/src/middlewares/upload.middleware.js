@@ -6,6 +6,7 @@ const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 const storage = multer.memoryStorage();
 
+// First-pass filter — checks Content-Type header (fast but attacker-controlled)
 const fileFilter = (req, file, cb) => {
   if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
     cb(null, true);
@@ -19,6 +20,35 @@ const upload = multer({
   limits: { fileSize: MAX_SIZE_BYTES },
   fileFilter,
 });
+
+/**
+ * Second-pass validation — reads file buffer magic bytes to verify actual content type.
+ * This prevents uploading malicious files with a spoofed Content-Type header.
+ */
+const validateMagicBytes = async (req, res, next) => {
+  if (!req.file) return next(); // no file uploaded — skip
+
+  try {
+    // file-type v16 is CJS-compatible
+    const FileType = require('file-type');
+    const type = await FileType.fromBuffer(req.file.buffer);
+
+    if (!type || !ALLOWED_MIME_TYPES.includes(type.mime)) {
+      return sendError(
+        res,
+        'Invalid file content. Only JPEG, PNG, and WebP images are allowed.',
+        415,
+        'UNSUPPORTED_MEDIA_TYPE'
+      );
+    }
+
+    // Override the client-provided mimetype with the verified one
+    req.file.mimetype = type.mime;
+    return next();
+  } catch (err) {
+    return sendError(res, 'Failed to validate file type', 400, 'UPLOAD_ERROR');
+  }
+};
 
 /**
  * Wraps multer errors so they flow through the global error handler
@@ -41,4 +71,6 @@ const handleUploadError = (multerMiddleware) => (req, res, next) => {
 
 module.exports = {
   uploadSingle: handleUploadError(upload.single('image')),
+  validateMagicBytes,
 };
+

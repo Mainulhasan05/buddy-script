@@ -14,8 +14,28 @@ const routes = require('./routes/index');
 
 const app = express();
 
-// Security headers
-app.use(helmet());
+// ── Security Headers ──────────────────────────────────────────────────────────
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        imgSrc: ["'self'", 'https://res.cloudinary.com', 'https://xsgames.co', 'data:'],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: ["'self'"],
+      },
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    crossOriginEmbedderPolicy: false, // allow cross-origin images (Cloudinary)
+  })
+);
+
+// Permissions-Policy — disable unused browser features
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
 
 // CORS — allow only the configured client origin
 app.use(
@@ -36,10 +56,12 @@ if (env.NODE_ENV !== 'test') {
   );
 }
 
-// Global rate limit — 100 requests / 15 min per IP
+// ── Global Rate Limit ─────────────────────────────────────────────────────────
+// 300 requests / 15 min per IP — covers normal browsing patterns at scale.
+// Per-action limits (auth, posts, comments, likes) are applied at the route level.
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests, please try again later.', code: 'RATE_LIMITED' },
@@ -71,3 +93,4 @@ app.use((req, res) => {
 app.use(errorMiddleware);
 
 module.exports = app;
+

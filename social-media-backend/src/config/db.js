@@ -3,9 +3,13 @@ const env = require('./env');
 const logger = require('../utils/logger');
 
 const MONGO_OPTIONS = {
-  maxPoolSize: 10,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
+  maxPoolSize: 100,           // max concurrent connections (up from 10)
+  minPoolSize: 10,            // keep warm connections ready — avoids cold-start latency
+  socketTimeoutMS: 45000,     // close idle sockets after 45s
+  serverSelectionTimeoutMS: 5000, // fail fast if DB unreachable
+  heartbeatFrequencyMS: 10000,    // check replica set health every 10s
+  retryWrites: true,          // automatically retry transient write errors
+  w: 'majority',              // write concern — data survives primary failover
 };
 
 let isConnected = false;

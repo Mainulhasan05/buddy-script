@@ -32,11 +32,15 @@ export function useOptimisticLike({ targetId, targetType, initialLiked, initialC
 
     try {
       const { data } = await likeApi.toggle({ targetId, targetType });
-      // Sync with server count
-      setCount(data.data.likeCount);
-      setIsLiked(data.data.isLiked);
+      // Server returns { isLiked, delta } — sync state with confirmed values
+      const serverLiked = data.data.isLiked;
+      // If server returned delta=0 (race condition), restore original state
+      const serverDelta = data.data.delta ?? 0;
+      const confirmedCount = serverDelta === 0 ? originalCount : nextCount;
+      setCount(confirmedCount);
+      setIsLiked(serverLiked);
       if (targetType === 'post') {
-        dispatch(updatePostLikeCount({ postId: targetId, likeCount: data.data.likeCount, isLiked: data.data.isLiked }));
+        dispatch(updatePostLikeCount({ postId: targetId, likeCount: confirmedCount, isLiked: serverLiked }));
       }
     } catch (err) {
       // Revert on failure

@@ -1,32 +1,42 @@
 const { z } = require('zod');
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.string().default('5000'),
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    PORT: z.string().default('5000'),
 
-  // Database — always required
-  MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
+    // Database — always required
+    MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
 
-  // Redis — optional in development (graceful degradation)
-  REDIS_URL: z.string().default(''),
+    // Redis — optional in development (graceful degradation)
+    REDIS_URL: z.string().default(''),
 
-  // RabbitMQ — optional in development (graceful degradation)
-  RABBITMQ_URL: z.string().default(''),
+    // RabbitMQ — optional in development (graceful degradation)
+    RABBITMQ_URL: z.string().default(''),
 
-  // JWT — always required
-  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
-  JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
-  JWT_ACCESS_EXPIRES: z.string().default('15m'),
-  JWT_REFRESH_EXPIRES: z.string().default('7d'),
+    // JWT — always required
+    JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
+    JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
+    JWT_ACCESS_EXPIRES: z.string().default('15m'),
+    JWT_REFRESH_EXPIRES: z.string().default('7d'),
 
-  // Cloudinary — optional in development (uploads will fail gracefully)
-  CLOUDINARY_CLOUD_NAME: z.string().default(''),
-  CLOUDINARY_API_KEY: z.string().default(''),
-  CLOUDINARY_API_SECRET: z.string().default(''),
+    // Cloudinary — optional in development (uploads will fail gracefully)
+    CLOUDINARY_CLOUD_NAME: z.string().default(''),
+    CLOUDINARY_API_KEY: z.string().default(''),
+    CLOUDINARY_API_SECRET: z.string().default(''),
 
-  // CORS
-  CLIENT_URL: z.string().default('http://localhost:3000'),
-});
+    // CORS
+    CLIENT_URL: z.string().default('http://localhost:3000'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.JWT_ACCESS_SECRET === data.JWT_REFRESH_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different',
+        path: ['JWT_REFRESH_SECRET'],
+      });
+    }
+  });
 
 const parsed = envSchema.safeParse(process.env);
 
@@ -39,3 +49,4 @@ if (!parsed.success) {
 }
 
 module.exports = parsed.data;
+
