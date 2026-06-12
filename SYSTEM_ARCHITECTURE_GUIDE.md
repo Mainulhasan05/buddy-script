@@ -973,6 +973,7 @@ Implement comments, replies, likes, and async RabbitMQ workers.
    - getLikers({ targetId, targetType, cursor, limit }) → paginated list with user info
    - getLikeState({ userId, targetId, targetType }) → Redis SISMEMBER first, DB fallback
 
+
 4. src/workers/like.worker.js
    - Connect to RabbitMQ, consume q.like.counter
    - Batch updates: collect 100 messages or 500ms, then bulkWrite to posts/comments

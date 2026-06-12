@@ -7,10 +7,28 @@ import LeftSidebar from '@/src/components/layout/LeftSidebar';
 import RightSidebar from '@/src/components/layout/RightSidebar';
 import FeedContainer from '@/src/components/feed/FeedContainer';
 import { toggleDarkMode, setDarkMode } from '@/src/store/slices/uiSlice';
+import { setUser } from '@/src/store/slices/authSlice';
+import { authApi } from '@/src/api/auth.api';
 
 export default function FeedPage() {
   const dispatch = useDispatch();
   const darkMode = useSelector((s) => s.ui.darkMode);
+  const user = useSelector((s) => s.auth.user);
+
+  // Hydrate user session on mount
+  useEffect(() => {
+    const fetchUser = async () => {
+      if (!user) {
+        try {
+          const { data } = await authApi.getMe();
+          dispatch(setUser(data.data.user));
+        } catch {
+          // Failure handles itself via global Axios 401 interceptor refresh redirect
+        }
+      }
+    };
+    fetchUser();
+  }, [dispatch, user]);
 
   // Load theme preference on mount
   useEffect(() => {

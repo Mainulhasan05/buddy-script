@@ -67,7 +67,11 @@ export default function Navbar() {
           </ul>
 
           {/* Profile dropdown */}
-          <div className="_header_nav_profile">
+          <div
+            className="_header_nav_profile"
+            onClick={() => setDropdownOpen((v) => !v)}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="_header_nav_profile_image">
               <img
                 src={user?.avatar?.url || '/assets/images/profile.png'}
@@ -80,7 +84,10 @@ export default function Navbar() {
               <button
                 type="button"
                 className="_header_nav_dropdown_btn _dropdown_toggle"
-                onClick={() => setDropdownOpen((v) => !v)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDropdownOpen((v) => !v);
+                }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" fill="none" viewBox="0 0 10 6">
                   <path fill="#112032" d="M5 5l.354.354L5 5.707l-.354-.353L5 5zm4.354-3.646l-4 4-.708-.708 4-4 .708.708zm-4.708 4l-4-4 .708-.708 4 4-.708.708z" />
@@ -89,7 +96,11 @@ export default function Navbar() {
             </div>
 
             {dropdownOpen && (
-              <div className="_nav_profile_dropdown _profile_dropdown" style={{ display: 'block' }}>
+              <div
+                className="_nav_profile_dropdown _profile_dropdown"
+                style={{ display: 'block' }}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="_nav_profile_dropdown_info">
                   <div className="_nav_profile_dropdown_image">
                     <img

@@ -5,6 +5,8 @@ const { signAccessToken, signRefreshToken, verifyRefreshToken, hashToken } = req
 const env = require('../config/env');
 
 const BCRYPT_ROUNDS = 12;
+const DEFAULT_AVATAR_BASE_URL = 'https://xsgames.co/randomusers/assets/avatars/male';
+const DEFAULT_AVATAR_COUNT = 50;
 
 // Cookie options for the httpOnly refresh token
 const REFRESH_COOKIE_OPTIONS = {
@@ -41,6 +43,12 @@ const issueTokens = async (user, res, meta = {}) => {
   return accessToken;
 };
 
+const getDefaultAvatarUrl = async () => {
+  const userCount = await User.estimatedDocumentCount();
+  const avatarNumber = (userCount % DEFAULT_AVATAR_COUNT) + 1;
+  return `${DEFAULT_AVATAR_BASE_URL}/${avatarNumber}.jpg`;
+};
+
 /**
  * Register a new user.
  */
@@ -56,7 +64,16 @@ const register = async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const user = await User.create({ firstName, lastName, email, passwordHash });
+  const user = await User.create({
+    firstName,
+    lastName,
+    email,
+    passwordHash,
+    avatar: {
+      url: await getDefaultAvatarUrl(),
+      publicId: null,
+    },
+  });
 
   const accessToken = await issueTokens(user, res, {
     userAgent: req.headers['user-agent'],
