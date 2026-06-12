@@ -84,12 +84,11 @@ export default function CommentItem({ comment }) {
       setReplyText('');
       setShowReplies(true);
     } catch (err) {
-      dispatch(
-        showToast({
-          message: getErrorMessage(err, "We couldn't post your reply. Please try again."),
-          type: 'error',
-        })
-      );
+      if (err.fieldErrors?.content) {
+        setReplyError(err.fieldErrors.content);
+      }
+      const message = err.message || "We couldn't post your reply. Please try again.";
+      dispatch(showToast({ message, type: 'error' }));
     } finally {
       setReplyLoading(false);
     }
@@ -164,29 +163,44 @@ export default function CommentItem({ comment }) {
               </button>
             )}
             {comment.depth === 0 && (
-              <form onSubmit={submitReply} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <input
-                  type="text"
-                  value={replyText}
-                  onChange={(e) => {
-                    setReplyText(e.target.value);
-                    if (replyError && e.target.value.trim()) setReplyError('');
-                  }}
-                  placeholder="Write a reply..."
-                  maxLength={1000}
-                  className="form-control _comment_textarea"
-                  style={{ flex: 1 }}
-                />
-                <Button
-                  type="submit"
-                  className="_feed_inner_text_area_btn_link"
-                  loading={replyLoading}
-                  loadingLabel="Replying..."
-                  style={{ padding: '6px 14px', whiteSpace: 'nowrap', minWidth: 78 }}
-                >
-                  Reply
-                </Button>
-              </form>
+              <div>
+                <form onSubmit={submitReply} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => {
+                      setReplyText(e.target.value);
+                      if (replyError && e.target.value.trim()) setReplyError('');
+                    }}
+                    placeholder="Write a reply..."
+                    maxLength={1000}
+                    className="form-control _comment_textarea"
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    type="submit"
+                    className="_feed_inner_text_area_btn_link"
+                    loading={replyLoading}
+                    loadingLabel="Replying..."
+                    style={{ padding: '6px 14px', whiteSpace: 'nowrap', minWidth: 78 }}
+                  >
+                    Reply
+                  </Button>
+                </form>
+                {replyText.length >= 900 && (
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: replyText.length >= 1000 ? '#e53e3e' : '#f59e0b',
+                      textAlign: 'right',
+                      marginTop: '2px',
+                      marginRight: '88px',
+                    }}
+                  >
+                    {replyText.length}/1000
+                  </div>
+                )}
+              </div>
             )}
             {replyError && <p style={{ color: '#dc2626', fontSize: 13, marginTop: 6 }}>{replyError}</p>}
           </div>

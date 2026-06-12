@@ -10,6 +10,7 @@ import { setCredentials } from '@/src/store/slices/authSlice';
 import { showToast } from '@/src/store/slices/uiSlice';
 import Button from '@/src/components/ui/Button';
 import { getErrorMessage } from '@/src/utils/apiError';
+import FormFieldError from '@/src/components/ui/FormFieldError';
 
 export default function LoginForm() {
   const dispatch = useDispatch();
@@ -17,19 +18,66 @@ export default function LoginForm() {
   const searchParams = useSearchParams();
 
   const [form, setForm] = useState({ email: '', password: '' });
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const sessionExpired = searchParams.get('reason') === 'session-expired';
   const redirectTo = searchParams.get('redirectTo') || '/feed';
 
+  const validateField = (name, value) => {
+    if (name === 'email') {
+      if (!value) return 'Email is required';
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) return 'Please enter a valid email address';
+    }
+    if (name === 'password') {
+      if (!value) return 'Password is required';
+    }
+    return '';
+  };
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    const errorMsg = validateField(name, value);
+    setErrors((prev) => ({ ...prev, [name]: errorMsg }));
+  };
+
   const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
     if (error) setError('');
+
+    if (touched[name] || errors[name]) {
+      const errorMsg = validateField(name, value);
+      setErrors((prev) => ({ ...prev, [name]: errorMsg }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate all fields
+    const newErrors = {};
+    const newTouched = {};
+    Object.keys(form).forEach((key) => {
+      newTouched[key] = true;
+      const errorMsg = validateField(key, form[key]);
+      if (errorMsg) {
+        newErrors[key] = errorMsg;
+      }
+    });
+
+    setErrors(newErrors);
+    setTouched(newTouched);
+
+    if (Object.keys(newErrors).length > 0) {
+      setError('Please resolve validation errors before logging in.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -111,10 +159,11 @@ export default function LoginForm() {
                           name="email"
                           value={form.email}
                           onChange={handleChange}
-                          className="form-control _social_login_input"
-                          required
+                          onBlur={handleBlur}
+                          className={`form-control _social_login_input ${errors.email ? 'is-invalid' : ''}`}
                           autoComplete="email"
                         />
+                        <FormFieldError error={errors.email} />
                       </div>
                     </div>
                     <div className="col-xl-12">
@@ -126,8 +175,8 @@ export default function LoginForm() {
                             name="password"
                             value={form.password}
                             onChange={handleChange}
-                            className="form-control _social_login_input"
-                            required
+                            onBlur={handleBlur}
+                            className={`form-control _social_login_input ${errors.password ? 'is-invalid' : ''}`}
                             autoComplete="current-password"
                             style={{ paddingRight: 74 }}
                           />
@@ -149,6 +198,7 @@ export default function LoginForm() {
                             {showPassword ? 'Hide' : 'Show'}
                           </button>
                         </div>
+                        <FormFieldError error={errors.password} />
                       </div>
                     </div>
                   </div>

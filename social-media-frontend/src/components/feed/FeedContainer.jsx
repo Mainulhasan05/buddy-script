@@ -10,7 +10,7 @@ import CreatePostModal from './CreatePostModal';
 import LikeList from '@/src/components/post/LikeList';
 import EmptyState from '@/src/components/ui/EmptyState';
 import RetryState from '@/src/components/ui/RetryState';
-import InlineSpinner from '@/src/components/ui/InlineSpinner';
+import PaginationSpinner from '@/src/components/ui/PaginationSpinner';
 
 export default function FeedContainer() {
   const dispatch = useDispatch();
@@ -105,10 +105,7 @@ export default function FeedContainer() {
 
       {/* Loading indicator for infinite scroll */}
       {loadingMore && posts.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: 18, color: '#64748b' }}>
-          <InlineSpinner />
-          <span>Loading more posts...</span>
-        </div>
+        <PaginationSpinner />
       )}
 
       {!loadingMore && error && posts.length > 0 && (

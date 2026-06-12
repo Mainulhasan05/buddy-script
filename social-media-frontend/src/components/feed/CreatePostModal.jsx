@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { closeCreatePostModal, showToast } from '@/src/store/slices/uiSlice';
 import { prependPost, setCreating } from '@/src/store/slices/feedSlice';
 import { postApi } from '@/src/api/post.api';
+import ConfirmationModal from '@/src/components/ui/ConfirmationModal';
 import Button from '@/src/components/ui/Button';
 import { getErrorMessage } from '@/src/utils/apiError';
 
@@ -23,24 +24,42 @@ export default function CreatePostModal() {
   const [imagePreview, setImagePreview] = useState(null);
   const [error, setError] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const fileRef = useRef(null);
 
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate type
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
       setError('Use a JPEG, PNG, or WebP image.');
-      e.target.value = '';
+      setImageFile(null);
+      setImagePreview(null);
+      if (fileRef.current) fileRef.current.value = '';
       return;
     }
+
+    // Validate size (5MB)
     if (file.size > MAX_IMAGE_BYTES) {
       setError('That image is too large. Choose an image under 5 MB.');
-      e.target.value = '';
+      setImageFile(null);
+      setImagePreview(null);
+      if (fileRef.current) fileRef.current.value = '';
       return;
     }
+
     setError('');
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleCloseAttempt = () => {
+    if (content.trim() || imageFile) {
+      setShowDiscardConfirm(true);
+    } else {
+      dispatch(closeCreatePostModal());
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -77,7 +96,7 @@ export default function CreatePostModal() {
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
       }}
-      onClick={() => dispatch(closeCreatePostModal())}
+      onClick={handleCloseAttempt}
     >
       <div
         style={{
@@ -98,7 +117,7 @@ export default function CreatePostModal() {
           </div>
           <button
             type="button"
-            onClick={() => dispatch(closeCreatePostModal())}
+            onClick={handleCloseAttempt}
             style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}
           >
             ×
@@ -200,6 +219,19 @@ export default function CreatePostModal() {
             </Button>
           </div>
         </form>
+        {showDiscardConfirm && (
+          <ConfirmationModal
+            title="Discard draft?"
+            message="You have unsaved changes. If you leave now, your draft will be lost."
+            confirmLabel="Discard"
+            cancelLabel="Keep editing"
+            onConfirm={() => {
+              setShowDiscardConfirm(false);
+              dispatch(closeCreatePostModal());
+            }}
+            onCancel={() => setShowDiscardConfirm(false)}
+          />
+        )}
       </div>
     </div>
   );

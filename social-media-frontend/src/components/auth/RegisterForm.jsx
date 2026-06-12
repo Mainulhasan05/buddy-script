@@ -9,7 +9,8 @@ import { authApi } from '@/src/api/auth.api';
 import { setCredentials } from '@/src/store/slices/authSlice';
 import { showToast } from '@/src/store/slices/uiSlice';
 import Button from '@/src/components/ui/Button';
-import { getErrorMessage } from '@/src/utils/apiError';
+import { getErrorMessage, normalizeApiError } from '@/src/utils/apiError';
+import FormFieldError from '@/src/components/ui/FormFieldError';
 
 export default function RegisterForm() {
   const dispatch = useDispatch();
@@ -22,39 +23,108 @@ export default function RegisterForm() {
     email: '',
     password: '',
     confirmPassword: '',
+    terms: false,
   });
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const redirectTo = searchParams.get('redirectTo') || '/feed';
 
+  const validateField = (name, value, allValues) => {
+    if (name === 'firstName') {
+      if (!value.trim()) return 'First name is required';
+      if (value.trim().length < 2) return 'First name must be at least 2 characters';
+      if (value.trim().length > 50) return 'First name must not exceed 50 characters';
+    }
+    if (name === 'lastName') {
+      if (!value.trim()) return 'Last name is required';
+      if (value.trim().length < 2) return 'Last name must be at least 2 characters';
+      if (value.trim().length > 50) return 'Last name must not exceed 50 characters';
+    }
+    if (name === 'email') {
+      if (!value) return 'Email is required';
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) return 'Please enter a valid email address';
+    }
+    if (name === 'password') {
+      if (!value) return 'Password is required';
+      if (value.length < 8) return 'Password must be at least 8 characters';
+      if (!/[A-Z]/.test(value)) return 'Password must contain at least one uppercase letter';
+      if (!/[0-9]/.test(value)) return 'Password must contain at least one number';
+    }
+    if (name === 'confirmPassword') {
+      if (!value) return 'Please repeat your password';
+      if (value !== allValues.password) return 'Passwords do not match';
+    }
+    if (name === 'terms') {
+      if (!value) return 'You must agree to the terms & conditions';
+    }
+    return '';
+  };
+
+  const handleBlur = (e) => {
+    const { name, value, checked, type } = e.target;
+    const val = type === 'checkbox' ? checked : value;
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    const errorMsg = validateField(name, val, form);
+    setErrors((prev) => ({ ...prev, [name]: errorMsg }));
+  };
+
   const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value, checked, type } = e.target;
+    const val = type === 'checkbox' ? checked : value;
+    setForm((prev) => ({ ...prev, [name]: val }));
     if (error) setError('');
+
+    if (touched[name] || errors[name]) {
+      const errorMsg = validateField(name, val, { ...form, [name]: val });
+      setErrors((prev) => ({ ...prev, [name]: errorMsg }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
 
-    if (form.password !== form.confirmPassword) {
-      setError('Passwords do not match');
+    // Validate all fields
+    const newErrors = {};
+    const newTouched = {};
+    Object.keys(form).forEach((key) => {
+      newTouched[key] = true;
+      const errorMsg = validateField(key, form[key], form);
+      if (errorMsg) {
+        newErrors[key] = errorMsg;
+      }
+    });
+
+    setErrors(newErrors);
+    setTouched(newTouched);
+
+    if (Object.keys(newErrors).length > 0) {
+      setError('Please resolve validation errors before registering.');
       return;
     }
 
     setLoading(true);
+    setError('');
+
     try {
       const { data } = await authApi.register({
-        firstName: form.firstName,
-        lastName: form.lastName,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
         email: form.email,
         password: form.password,
       });
       dispatch(setCredentials({ user: data.data.user, accessToken: data.data.accessToken }));
       router.push(redirectTo.startsWith('/') ? redirectTo : '/feed');
     } catch (err) {
-      setError(getErrorMessage(err, "We couldn't create your account. Please try again."));
+      const normalized = normalizeApiError(err);
+      if (normalized.fieldErrors && Object.keys(normalized.fieldErrors).length > 0) {
+        setErrors(normalized.fieldErrors);
+      }
+      setError(normalized.message || "We couldn't create your account. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -124,11 +194,12 @@ export default function RegisterForm() {
                           name="firstName"
                           value={form.firstName}
                           onChange={handleChange}
-                          className="form-control _social_registration_input"
-                          required
+                          onBlur={handleBlur}
+                          className={`form-control _social_registration_input ${errors.firstName ? 'is-invalid' : ''}`}
                           minLength={2}
                           maxLength={50}
                         />
+                        <FormFieldError error={errors.firstName} />
                       </div>
                     </div>
                     <div className="col-xl-12">
@@ -139,11 +210,12 @@ export default function RegisterForm() {
                           name="lastName"
                           value={form.lastName}
                           onChange={handleChange}
-                          className="form-control _social_registration_input"
-                          required
+                          onBlur={handleBlur}
+                          className={`form-control _social_registration_input ${errors.lastName ? 'is-invalid' : ''}`}
                           minLength={2}
                           maxLength={50}
                         />
+                        <FormFieldError error={errors.lastName} />
                       </div>
                     </div>
                     <div className="col-xl-12">
@@ -154,10 +226,11 @@ export default function RegisterForm() {
                           name="email"
                           value={form.email}
                           onChange={handleChange}
-                          className="form-control _social_registration_input"
-                          required
+                          onBlur={handleBlur}
+                          className={`form-control _social_registration_input ${errors.email ? 'is-invalid' : ''}`}
                           autoComplete="email"
                         />
+                        <FormFieldError error={errors.email} />
                       </div>
                     </div>
                     <div className="col-xl-12">
@@ -169,9 +242,8 @@ export default function RegisterForm() {
                             name="password"
                             value={form.password}
                             onChange={handleChange}
-                            className="form-control _social_registration_input"
-                            required
-                            minLength={8}
+                            onBlur={handleBlur}
+                            className={`form-control _social_registration_input ${errors.password ? 'is-invalid' : ''}`}
                             autoComplete="new-password"
                             style={{ paddingRight: 74 }}
                           />
@@ -193,6 +265,7 @@ export default function RegisterForm() {
                             {showPassword ? 'Hide' : 'Show'}
                           </button>
                         </div>
+                        <FormFieldError error={errors.password} />
                       </div>
                     </div>
                     <div className="col-xl-12">
@@ -204,8 +277,8 @@ export default function RegisterForm() {
                             name="confirmPassword"
                             value={form.confirmPassword}
                             onChange={handleChange}
-                            className="form-control _social_registration_input"
-                            required
+                            onBlur={handleBlur}
+                            className={`form-control _social_registration_input ${errors.confirmPassword ? 'is-invalid' : ''}`}
                             autoComplete="new-password"
                             style={{ paddingRight: 74 }}
                           />
@@ -227,23 +300,30 @@ export default function RegisterForm() {
                             {showConfirmPassword ? 'Hide' : 'Show'}
                           </button>
                         </div>
+                        <FormFieldError error={errors.confirmPassword} />
                       </div>
                     </div>
                   </div>
 
                   <div className="row">
                     <div className="col-lg-12 col-xl-12 col-md-12 col-sm-12">
-                      <div className="form-check _social_registration_form_check">
-                        <input
-                          className="form-check-input _social_registration_form_check_input"
-                          type="radio"
-                          name="flexRadioDefault"
-                          id="flexRadioDefault2"
-                          defaultChecked
-                        />
-                        <label className="form-check-label _social_registration_form_check_label" htmlFor="flexRadioDefault2">
-                          I agree to terms & conditions
-                        </label>
+                      <div className="form-check _social_registration_form_check" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            className="form-check-input _social_registration_form_check_input"
+                            type="checkbox"
+                            name="terms"
+                            id="terms"
+                            checked={form.terms}
+                            onChange={handleChange}
+                            onBlur={handleBlur}
+                            style={{ marginTop: 0 }}
+                          />
+                          <label className="form-check-label _social_registration_form_check_label" htmlFor="terms">
+                            I agree to terms & conditions
+                          </label>
+                        </div>
+                        <FormFieldError error={errors.terms} />
                       </div>
                     </div>
                   </div>

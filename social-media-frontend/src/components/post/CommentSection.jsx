@@ -62,8 +62,10 @@ export default function CommentSection({ postId }) {
       dispatch(showToast({ message: 'Comment posted.', type: 'success' }));
       setCommentText('');
     } catch (err) {
-      const message = getErrorMessage(err, "We couldn't post your comment. Please try again.");
-      if (err.fieldErrors?.content) setFieldError(err.fieldErrors.content);
+      if (err.fieldErrors?.content) {
+        setFieldError(err.fieldErrors.content);
+      }
+      const message = err.message || "We couldn't post your comment. Please try again.";
       dispatch(showToast({ message, type: 'error' }));
     } finally {
       setSubmitting(false);
@@ -95,6 +97,18 @@ export default function CommentSection({ postId }) {
                 maxLength={1000}
                 rows={1}
               />
+              {commentText.length >= 900 && (
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: commentText.length >= 1000 ? '#e53e3e' : '#f59e0b',
+                    textAlign: 'right',
+                    marginTop: '2px',
+                  }}
+                >
+                  {commentText.length}/1000
+                </div>
+              )}
             </div>
           </div>
           <div className="_feed_inner_comment_box_icon">
