@@ -60,7 +60,13 @@ const googleCallback = async (req, res, next) => {
     const result = await authService.googleCallback(req, res);
     res.redirect(result.redirectUrl);
   } catch (err) {
-    next(err);
+    // For OAuth callback failures, redirect to the frontend with an error
+    // instead of showing a JSON error page to the user
+    const env = require('../config/env');
+    const errorUrl = new URL('/auth/google/callback', env.CLIENT_URL);
+    errorUrl.searchParams.set('error', err.code || 'GOOGLE_AUTH_FAILED');
+    errorUrl.searchParams.set('message', err.message || 'Google login failed');
+    res.redirect(errorUrl.toString());
   }
 };
 

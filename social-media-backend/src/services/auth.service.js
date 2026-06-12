@@ -16,7 +16,7 @@ const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: 'Strict',
+  sameSite: 'Lax',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
   path: '/',
 };
@@ -117,6 +117,12 @@ const exchangeGoogleCode = async (req, code) => {
   });
 
   if (!response.ok) {
+    let errorDetail = '';
+    try {
+      const body = await response.json();
+      errorDetail = ` (${body.error}: ${body.error_description || 'no description'})`;
+    } catch { /* ignore parse errors */ }
+    console.error(`Google token exchange failed: ${response.status}${errorDetail}`);
     const err = new Error('Google login failed');
     err.statusCode = 401;
     err.code = 'GOOGLE_TOKEN_EXCHANGE_FAILED';
