@@ -71,9 +71,23 @@ const connectRedis = async () => {
     logger.warn('Skipping Redis connection — REDIS_URL not set');
     return;
   }
+
+  // Skip if already connected/connecting to avoid "Redis is already connecting/connected" error
+  if (redis.status === 'connecting' || redis.status === 'connect' || redis.status === 'ready') {
+    logger.info(`Redis connection already in progress or established (status: ${redis.status})`);
+    isAvailable = true;
+    return;
+  }
+
   try {
     await redis.connect();
   } catch (err) {
+    if (err.message.includes('already connecting') || err.message.includes('already connected')) {
+      logger.info('Redis connection already in progress or established');
+      isAvailable = true;
+      return;
+    }
+
     if (env.NODE_ENV === 'production') {
       logger.error(`CRITICAL: Redis connection failed in production: ${err.message}`);
       throw err;

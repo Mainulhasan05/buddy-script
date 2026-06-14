@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useDispatch, useSelector } from 'react-redux';
 import { formatRelative } from 'date-fns';
 import { removePost } from '@/src/store/slices/feedSlice';
@@ -116,17 +117,16 @@ export default function PostCard({ post }) {
           {post.content}
         </p>
 
-        {/* Post image */}
+        {/* Post image — next/image for automatic format and size optimization */}
         {post.image?.url && (
-          <div className="_feed_inner_timeline_image">
-            <img
+          <div className="_feed_inner_timeline_image" style={{ position: 'relative', width: '100%', aspectRatio: post.image.width && post.image.height ? `${post.image.width} / ${post.image.height}` : '16 / 9' }}>
+            <Image
               src={post.image.url}
               alt="Post"
-              className="_time_img"
+              fill
+              sizes="(max-width: 768px) 100vw, 600px"
+              style={{ objectFit: 'contain', borderRadius: 8 }}
               loading="lazy"
-              width={post.image?.width || undefined}
-              height={post.image?.height || undefined}
-              style={{ width: '100%', borderRadius: 8 }}
             />
           </div>
         )}
