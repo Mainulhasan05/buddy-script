@@ -21,7 +21,7 @@ export default function FeedPage() {
       if (!user) {
         try {
           const { data } = await authApi.getMe();
-          dispatch(setUser(data.data.user));
+          dispatch(setUser(data.data));
         } catch {
           // Failure handles itself via global Axios 401 interceptor refresh redirect
         }
