@@ -21,12 +21,15 @@ const connectRabbitMQ = async () => {
 
   try {
     connection = await amqplib.connect(env.RABBITMQ_URL);
-    channel = await connection.createChannel();
+
+    // Use a confirm channel — publish() calls return a promise that resolves
+    // only after the broker confirms receipt. This prevents silent message loss.
+    channel = await connection.createConfirmChannel();
 
     await channel.assertExchange(EXCHANGE_NAME, EXCHANGE_TYPE, { durable: true });
     channel.prefetch(10);
 
-    logger.info('RabbitMQ connected and exchange asserted');
+    logger.info('RabbitMQ connected with confirm channel and exchange asserted');
 
     connection.on('error', (err) => {
       logger.error(`RabbitMQ connection error: ${err.message}`);
@@ -55,19 +58,30 @@ const getChannel = () => {
 
 /**
  * Publish a message to the topic exchange.
+ * Uses confirm channel — waits for broker ACK before resolving.
  * Silently drops if RabbitMQ is not connected (graceful degradation).
+ * Returns true if the message was confirmed, false otherwise.
  */
-const publish = (routingKey, payload) => {
+const publish = async (routingKey, payload) => {
   const ch = getChannel();
   if (!ch) {
     logger.warn(`RabbitMQ not available — dropping event: ${routingKey}`);
-    return;
+    return false;
   }
-  const content = Buffer.from(JSON.stringify(payload));
-  ch.publish(EXCHANGE_NAME, routingKey, content, {
-    persistent: true,
-    contentType: 'application/json',
-  });
+
+  try {
+    const content = Buffer.from(JSON.stringify(payload));
+    // waitForConfirms() resolves when broker confirms all outstanding publishes
+    ch.publish(EXCHANGE_NAME, routingKey, content, {
+      persistent: true,
+      contentType: 'application/json',
+    });
+    await ch.waitForConfirms();
+    return true;
+  } catch (err) {
+    logger.error(`RabbitMQ publish failed for ${routingKey}: ${err.message}`);
+    return false;
+  }
 };
 
 module.exports = { connectRabbitMQ, getChannel, publish, EXCHANGE_NAME };

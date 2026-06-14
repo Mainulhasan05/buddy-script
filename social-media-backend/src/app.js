@@ -10,6 +10,7 @@ const mongoSanitize = require('express-mongo-sanitize');
 const env = require('./config/env');
 const logger = require('./utils/logger');
 const errorMiddleware = require('./middlewares/error.middleware');
+const requestTimer = require('./middlewares/requestTimer.middleware');
 const routes = require('./routes/index');
 
 const app = express();
@@ -83,6 +84,9 @@ app.use(mongoSanitize());
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
+
+// Request timing — measure latency for all API requests
+app.use('/api', requestTimer);
 
 // API routes
 app.use('/api', routes);

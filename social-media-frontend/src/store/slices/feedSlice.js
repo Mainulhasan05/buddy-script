@@ -4,6 +4,12 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { postApi } from '@/src/api/post.api';
 import { getErrorMessage } from '@/src/utils/apiError';
 
+// ─── Feed Memory Control ──────────────────────────────────────────────────────
+// Cap retained posts to prevent unbounded memory growth during long scroll sessions.
+// 200 posts ≈ 10 pages of 20 — keeps enough content for smooth back-scrolling
+// while preventing browser memory pressure during extended sessions.
+const MAX_RETAINED_POSTS = 200;
+
 // ─── Async Thunks ────────────────────────────────────────────────────────────
 
 export const fetchFeed = createAsyncThunk('feed/fetchFeed', async (_, { rejectWithValue }) => {
@@ -48,6 +54,10 @@ const feedSlice = createSlice({
     },
     prependPost(state, action) {
       state.posts.unshift(action.payload);
+      // Enforce retention limit when prepending too
+      if (state.posts.length > MAX_RETAINED_POSTS) {
+        state.posts = state.posts.slice(0, MAX_RETAINED_POSTS);
+      }
       state.creating = false;
     },
     removePost(state, action) {
@@ -100,6 +110,10 @@ const feedSlice = createSlice({
       .addCase(fetchNextPage.fulfilled, (state, action) => {
         const { posts, pagination } = action.payload;
         state.posts.push(...posts);
+        // Trim oldest posts if exceeding retention limit — prevents unbounded memory growth
+        if (state.posts.length > MAX_RETAINED_POSTS) {
+          state.posts = state.posts.slice(state.posts.length - MAX_RETAINED_POSTS);
+        }
         state.nextCursor = pagination?.nextCursor ?? null;
         state.hasMore = pagination?.hasMore ?? false;
         state.loadingMore = false;
@@ -121,3 +135,4 @@ export const {
 } = feedSlice.actions;
 
 export default feedSlice.reducer;
+

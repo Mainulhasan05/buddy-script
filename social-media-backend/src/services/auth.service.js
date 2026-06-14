@@ -12,6 +12,10 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
+// Maximum active refresh tokens per user — prevents unbounded token collection growth
+// from many devices, frequent refreshes, or long-lived sessions.
+const MAX_ACTIVE_SESSIONS = 5;
+
 // Cookie options for the httpOnly refresh token
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -24,6 +28,7 @@ const REFRESH_COOKIE_OPTIONS = {
 /**
  * Issue a token pair and persist the hashed refresh token in DB.
  * Also sets the httpOnly cookie on the response.
+ * Enforces max active sessions per user — deletes oldest tokens beyond the cap.
  */
 const issueTokens = async (user, res, meta = {}) => {
   const payload = {
@@ -44,6 +49,17 @@ const issueTokens = async (user, res, meta = {}) => {
     userAgent: meta.userAgent || null,
     ip: meta.ip || null,
   });
+
+  // Enforce max active sessions — delete oldest tokens beyond the cap
+  const activeTokens = await RefreshToken.find({ userId: user._id })
+    .sort({ createdAt: -1 })
+    .select('_id')
+    .lean();
+
+  if (activeTokens.length > MAX_ACTIVE_SESSIONS) {
+    const idsToDelete = activeTokens.slice(MAX_ACTIVE_SESSIONS).map((t) => t._id);
+    await RefreshToken.deleteMany({ _id: { $in: idsToDelete } });
+  }
 
   // Set httpOnly cookie
   res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS);

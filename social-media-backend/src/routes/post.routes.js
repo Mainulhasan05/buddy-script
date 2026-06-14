@@ -2,7 +2,7 @@ const { Router } = require('express');
 const postController = require('../controllers/post.controller');
 const { authenticate } = require('../middlewares/auth.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { uploadSingle, validateMagicBytes } = require('../middlewares/upload.middleware');
+const { concurrencyGate, uploadSingle, validateMagicBytes } = require('../middlewares/upload.middleware');
 const createLimiter = require('../utils/rate-limiter.util');
 const {
   createPostSchema,
@@ -40,6 +40,7 @@ router.post(
   '/',
   textPostLimiter,
   uploadPostLimiter,
+  concurrencyGate,
   uploadSingle,
   validateMagicBytes,
   validate(createPostSchema),
