@@ -51,6 +51,9 @@ const addComment = async ({ postId, userId, content }) => {
     content,
   });
 
+  // Synchronous counter update — no async worker exists for comment counting
+  await Post.updateOne({ _id: postId }, { $inc: { commentCount: 1 } });
+
   // Invalidate comment cache for this post by incrementing comments version
   await cacheService.incrCommentVersion(postId);
 
