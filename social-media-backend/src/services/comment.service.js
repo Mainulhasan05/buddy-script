@@ -31,17 +31,17 @@ const fetchUserSnap = async (userId) => {
  * Add a top-level comment (depth=0) to a post.
  */
 const addComment = async ({ postId, userId, content }) => {
-  const post = await Post.findOne({ _id: postId, deletedAt: null })
-    .select('_id')
-    .lean();
+  const [post, author] = await Promise.all([
+    Post.findOne({ _id: postId, deletedAt: null }).select('_id').lean(),
+    fetchUserSnap(userId),
+  ]);
+
   if (!post) {
     const err = new Error('Post not found');
     err.statusCode = 404;
     err.code = 'POST_NOT_FOUND';
     throw err;
   }
-
-  const author = await fetchUserSnap(userId);
 
   const comment = await Comment.create({
     postId,
@@ -65,9 +65,11 @@ const addComment = async ({ postId, userId, content }) => {
  * Max depth is 1 — replies to replies are rejected.
  */
 const addReply = async ({ commentId, userId, content }) => {
-  const parent = await Comment.findOne({ _id: commentId, deletedAt: null })
-    .select('_id postId depth')
-    .lean();
+  const [parent, author] = await Promise.all([
+    Comment.findOne({ _id: commentId, deletedAt: null }).select('_id postId depth').lean(),
+    fetchUserSnap(userId),
+  ]);
+
   if (!parent) {
     const err = new Error('Comment not found');
     err.statusCode = 404;
@@ -81,8 +83,6 @@ const addReply = async ({ commentId, userId, content }) => {
     err.code = 'MAX_DEPTH_EXCEEDED';
     throw err;
   }
-
-  const author = await fetchUserSnap(userId);
 
   const reply = await Comment.create({
     postId: parent.postId,

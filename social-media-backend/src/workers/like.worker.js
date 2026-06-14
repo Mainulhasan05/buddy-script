@@ -46,15 +46,21 @@ const flushBatch = async (channel) => {
     logger.info(`like.worker: flushed ${current.size} updates`);
   } catch (err) {
     logger.error(`like.worker: bulkWrite failed — ${err.message}`);
-    // NACK all so they requeue
+    // Republish with incremented retry header, then ACK original so they are not requeued infinitely
     for (const [, item] of current) {
       item.msgs.forEach((m) => {
-        const retries = (m.properties.headers?.[RETRY_HEADER] || 0) + 1;
+        const headers = m.properties.headers || {};
+        const retries = (headers[RETRY_HEADER] || 0) + 1;
         if (retries >= MAX_RETRIES) {
           logger.error(`like.worker: max retries reached for msg, dead-lettering`);
-          channel.nack(m, false, false); // discard after max retries
+          channel.nack(m, false, false); // discard/DLQ
         } else {
-          channel.nack(m, false, true); // requeue
+          const updatedHeaders = { ...headers, [RETRY_HEADER]: retries };
+          channel.publish(EXCHANGES.SOCIAL_EVENTS, m.fields.routingKey, m.content, {
+            headers: updatedHeaders,
+            persistent: true,
+          });
+          channel.ack(m);
         }
       });
     }

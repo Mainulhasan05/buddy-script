@@ -55,18 +55,29 @@ if (env.REDIS_URL) {
   });
   redis.on('reconnecting', () => logger.warn('Redis reconnecting...'));
 } else {
+  if (env.NODE_ENV === 'production') {
+    logger.error('CRITICAL: REDIS_URL is not configured in production environment.');
+    throw new Error('REDIS_URL is required in production environment.');
+  }
   redis = createNoopRedis();
   logger.warn('Redis not configured — running without cache (REDIS_URL is empty)');
 }
 
 const connectRedis = async () => {
   if (!env.REDIS_URL) {
+    if (env.NODE_ENV === 'production') {
+      throw new Error('REDIS_URL is required in production environment.');
+    }
     logger.warn('Skipping Redis connection — REDIS_URL not set');
     return;
   }
   try {
     await redis.connect();
   } catch (err) {
+    if (env.NODE_ENV === 'production') {
+      logger.error(`CRITICAL: Redis connection failed in production: ${err.message}`);
+      throw err;
+    }
     logger.error(`Redis connect failed: ${err.message} — running without cache`);
     // Don't crash — fall back to noop
     redis = createNoopRedis();

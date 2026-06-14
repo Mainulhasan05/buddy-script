@@ -1,6 +1,6 @@
 # Performance Plan
 
-Status: Waiting for approval before implementation.  
+Status: First batches (Phases 1 & 2, and parts of Phase 3) fully implemented and verified.  
 Principle: Fix correctness and high-ROI bottlenecks first, measure before broad refactors, and preserve current API contracts unless explicitly approved.
 
 ## Phase 0: Baseline And Safety

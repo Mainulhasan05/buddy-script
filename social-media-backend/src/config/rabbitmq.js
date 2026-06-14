@@ -11,6 +11,10 @@ let channel = null;
 
 const connectRabbitMQ = async () => {
   if (!env.RABBITMQ_URL) {
+    if (env.NODE_ENV === 'production') {
+      logger.error('CRITICAL: RABBITMQ_URL is not set in production. App must fail-fast.');
+      throw new Error('RABBITMQ_URL is required in production environment.');
+    }
     logger.warn('Skipping RabbitMQ connection — RABBITMQ_URL not set (events will be dropped)');
     return;
   }
@@ -35,6 +39,10 @@ const connectRabbitMQ = async () => {
       setTimeout(connectRabbitMQ, RECONNECT_DELAY_MS);
     });
   } catch (err) {
+    if (env.NODE_ENV === 'production') {
+      logger.error(`CRITICAL: RabbitMQ connection failed in production: ${err.message}`);
+      throw err;
+    }
     logger.error(`RabbitMQ connect failed: ${err.message} — retrying in 5s...`);
     setTimeout(connectRabbitMQ, RECONNECT_DELAY_MS);
   }
