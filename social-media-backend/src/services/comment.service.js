@@ -51,11 +51,8 @@ const addComment = async ({ postId, userId, content }) => {
     content,
   });
 
-  // Synchronous counter update — no async worker exists for comment counting
-  await Post.updateOne({ _id: postId }, { $inc: { commentCount: 1 } });
-
-  // Invalidate comment cache for this post
-  await cacheService.del(CACHE_KEYS.POST_COMMENTS(postId));
+  // Invalidate comment cache for this post by incrementing comments version
+  await cacheService.incrCommentVersion(postId);
 
   return comment;
 };
@@ -95,6 +92,9 @@ const addReply = async ({ commentId, userId, content }) => {
   // Synchronous counter update — no async worker exists for reply counting
   await Comment.updateOne({ _id: commentId }, { $inc: { replyCount: 1 } });
 
+  // Invalidate comment cache for this post by incrementing comments version
+  await cacheService.incrCommentVersion(parent.postId);
+
   return reply;
 };
 
@@ -104,7 +104,9 @@ const addReply = async ({ commentId, userId, content }) => {
  */
 const getComments = async ({ postId, cursor, limit = 20, userId }) => {
   limit = Math.min(Number(limit), 50);
-  const cacheKey = CACHE_KEYS.POST_COMMENTS(`${postId}:${cursor || 'first'}`);
+  
+  const version = await cacheService.getCommentVersion(postId);
+  const cacheKey = CACHE_KEYS.POST_COMMENTS(postId, version, cursor);
 
   const cached = await cacheService.get(cacheKey);
   let result;

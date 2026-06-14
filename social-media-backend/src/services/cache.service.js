@@ -129,5 +129,44 @@ const incrFeedVersion = async () => {
   }
 };
 
-module.exports = { get, set, del, sAdd, sIsMember, sRem, scanDel, getFeedVersion, incrFeedVersion };
+/**
+ * Get the current comments cache version for a post (O(1) GET).
+ * Returns '0' if not set yet.
+ */
+const getCommentVersion = async (postId) => {
+  try {
+    const v = await getRedis().get(`post:${postId}:comments:version`);
+    return v || '0';
+  } catch (err) {
+    logger.error(`Cache comment version GET error for post ${postId}: ${err.message}`);
+    return '0';
+  }
+};
+
+/**
+ * Increment the comments cache version for a post (O(1) INCR).
+ * All old comment pages (keyed with previous version) expire naturally via TTL.
+ */
+const incrCommentVersion = async (postId) => {
+  try {
+    return await getRedis().incr(`post:${postId}:comments:version`);
+  } catch (err) {
+    logger.error(`Cache comment version INCR error for post ${postId}: ${err.message}`);
+    return null;
+  }
+};
+
+module.exports = {
+  get,
+  set,
+  del,
+  sAdd,
+  sIsMember,
+  sRem,
+  scanDel,
+  getFeedVersion,
+  incrFeedVersion,
+  getCommentVersion,
+  incrCommentVersion,
+};
 

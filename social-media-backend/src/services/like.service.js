@@ -3,8 +3,6 @@ const Like = require('../models/Like.model');
 const Post = require('../models/Post.model');
 const Comment = require('../models/Comment.model');
 const cacheService = require('./cache.service');
-const { publish } = require('../config/rabbitmq');
-const { ROUTING_KEYS } = require('../constants/queue.constants');
 const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
 const logger = require('../utils/logger');
 
@@ -19,12 +17,11 @@ const toggle = async ({ userId, targetId, targetType }) => {
 
   if (deleted) {
     // Unlike — document was removed
-    // Atomically decrement the parent counter
+    // Synchronous counter decrement — single owner, no worker duplication
     const Model = targetType === 'post' ? Post : Comment;
     await Model.updateOne({ _id: targetId }, { $inc: { likeCount: -1 } });
 
     await cacheService.sRem(CACHE_KEYS.LIKES(targetType, targetId), userId.toString());
-    publish(ROUTING_KEYS.LIKE_DELETED, { targetId: targetId.toString(), targetType, delta: -1 });
 
     return { isLiked: false, delta: -1 };
   }
@@ -40,12 +37,11 @@ const toggle = async ({ userId, targetId, targetType }) => {
     throw err;
   }
 
-  // Atomically increment the parent counter
+  // Synchronous counter increment — single owner, no worker duplication
   const Model = targetType === 'post' ? Post : Comment;
   await Model.updateOne({ _id: targetId }, { $inc: { likeCount: 1 } });
 
   await cacheService.sAdd(CACHE_KEYS.LIKES(targetType, targetId), userId.toString(), CACHE_TTL.LIKES);
-  publish(ROUTING_KEYS.LIKE_CREATED, { targetId: targetId.toString(), targetType, delta: 1 });
 
   return { isLiked: true, delta: 1 };
 };

@@ -7,7 +7,8 @@ const CACHE_KEYS = {
   FEED_VERSION: 'feed:version',
   FEED: (version, cursor) => `feed:public:v${version}:${cursor || 'first'}`,
   POST: (postId) => `post:${postId}`,
-  POST_COMMENTS: (postId) => `post:${postId}:comments`,
+  POST_COMMENTS_VERSION: (postId) => `post:${postId}:comments:version`,
+  POST_COMMENTS: (postId, version, cursor) => `post:${postId}:comments:v${version}:${cursor || 'first'}`,
   LIKES: (type, id) => `likes:${type}:${id}`,
   USER_SESSION: (userId) => `user:${userId}:session`,
 };
@@ -19,7 +20,4 @@ const CACHE_TTL = {
   LIKES: 86400,   // 24 hours — like state sets expire and rebuild from DB on miss
 };
 
-// Only cache the first N pages of feed — deeper pages bypass cache (low hit rate)
-const MAX_CACHED_FEED_PAGES = 5;
-
-module.exports = { CACHE_KEYS, CACHE_TTL, MAX_CACHED_FEED_PAGES };
+module.exports = { CACHE_KEYS, CACHE_TTL };

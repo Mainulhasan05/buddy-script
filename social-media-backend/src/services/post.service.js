@@ -5,7 +5,7 @@ const uploadService = require('./upload.service');
 const likeService = require('./like.service');
 const { publish } = require('../config/rabbitmq');
 const { ROUTING_KEYS } = require('../constants/queue.constants');
-const { CACHE_KEYS, CACHE_TTL, MAX_CACHED_FEED_PAGES } = require('../constants/cache.constants');
+const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
 const { buildCursorQuery, encodeCursor } = require('../utils/pagination.util');
 const logger = require('../utils/logger');
 
@@ -75,13 +75,16 @@ const createPost = async ({ userId, content, file, visibility = 'public' }) => {
 const getFeed = async ({ cursor, limit = 20, userId }) => {
   limit = Math.min(Number(limit), 50); // cap at 50
 
-  // Versioned cache key — only cache first N pages for bounded memory usage
-  const feedVersion = await cacheService.getFeedVersion();
-  const pageNum = cursor ? parseInt(Buffer.from(cursor, 'base64').toString().match(/"pageNum":(\d+)/)?.[1] || '1', 10) : 0;
-  const shouldCache = pageNum < MAX_CACHED_FEED_PAGES;
-  const cacheKey = shouldCache ? CACHE_KEYS.FEED(feedVersion, cursor) : null;
+  // Only cache the first page (no cursor). Deeper pages have low reuse and
+  // cursors are unique per position, so caching them wastes Redis memory.
+  const isFirstPage = !cursor;
+  let cacheKey = null;
+  if (isFirstPage) {
+    const feedVersion = await cacheService.getFeedVersion();
+    cacheKey = CACHE_KEYS.FEED(feedVersion, null);
+  }
 
-  const cached = shouldCache ? await cacheService.get(cacheKey) : null;
+  const cached = cacheKey ? await cacheService.get(cacheKey) : null;
   let result;
   if (cached) {
     result = cached; // cacheService.get() already returns a fresh parsed object
@@ -103,7 +106,7 @@ const getFeed = async ({ cursor, limit = 20, userId }) => {
     const nextCursor = hasMore ? encodeCursor(posts[posts.length - 1]) : null;
     result = { posts, pagination: { nextCursor, hasMore } };
 
-    if (shouldCache) {
+    if (cacheKey) {
       await cacheService.set(cacheKey, result, CACHE_TTL.FEED);
     }
   }

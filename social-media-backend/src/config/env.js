@@ -7,6 +7,8 @@ const envSchema = z
 
     // Database — always required
     MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
+    MONGO_MAX_POOL_SIZE: z.string().default('10'),
+    MONGO_MIN_POOL_SIZE: z.string().default('2'),
 
     // Redis — optional in development (graceful degradation)
     REDIS_URL: z.string().default(''),
