@@ -26,7 +26,11 @@ export default function LoginForm() {
   const sessionExpired = searchParams.get('reason') === 'session-expired';
   const redirectTo = searchParams.get('redirectTo') || '/feed';
   const startGoogleLogin = () => {
-    window.location.href = authApi.getGoogleLoginUrl(redirectTo);
+    try {
+      window.location.href = authApi.getGoogleLoginUrl(redirectTo);
+    } catch {
+      setError('Google login is not configured for this environment.');
+    }
   };
 
   const validateField = (name, value) => {

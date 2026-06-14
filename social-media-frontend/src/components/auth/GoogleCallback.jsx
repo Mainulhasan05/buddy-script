@@ -16,9 +16,10 @@ export default function GoogleCallback() {
     const finishLogin = async () => {
       const accessToken = searchParams.get('accessToken');
       const redirectTo = searchParams.get('redirectTo') || '/feed';
+      const errorMessage = searchParams.get('message');
 
       if (!accessToken) {
-        setMessage("We couldn't finish Google sign-in. Please try again.");
+        setMessage(errorMessage || "We couldn't finish Google sign-in. Please try again.");
         setTimeout(() => router.replace('/login'), 1200);
         return;
       }
