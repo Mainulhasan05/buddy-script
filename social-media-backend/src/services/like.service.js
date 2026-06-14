@@ -5,6 +5,8 @@ const Comment = require('../models/Comment.model');
 const cacheService = require('./cache.service');
 const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
 const logger = require('../utils/logger');
+const { publish } = require('../config/rabbitmq');
+const { ROUTING_KEYS } = require('../constants/queue.constants');
 
 /**
  * Toggle like on a post or comment.
@@ -17,9 +19,18 @@ const toggle = async ({ userId, targetId, targetType }) => {
 
   if (deleted) {
     // Unlike — document was removed
-    // Synchronous counter decrement — single owner, no worker duplication
-    const Model = targetType === 'post' ? Post : Comment;
-    await Model.updateOne({ _id: targetId }, { $inc: { likeCount: -1 } });
+    // Try to publish async event — worker handles counter updates if connected
+    const published = await publish(ROUTING_KEYS.LIKE_DELETED, {
+      targetId: targetId.toString(),
+      targetType,
+      delta: -1,
+    });
+
+    if (!published) {
+      // Fallback to synchronous counter decrement if RabbitMQ is not available
+      const Model = targetType === 'post' ? Post : Comment;
+      await Model.updateOne({ _id: targetId }, { $inc: { likeCount: -1 } });
+    }
 
     await cacheService.sRem(CACHE_KEYS.LIKES(targetType, targetId), userId.toString());
 
@@ -37,9 +48,18 @@ const toggle = async ({ userId, targetId, targetType }) => {
     throw err;
   }
 
-  // Synchronous counter increment — single owner, no worker duplication
-  const Model = targetType === 'post' ? Post : Comment;
-  await Model.updateOne({ _id: targetId }, { $inc: { likeCount: 1 } });
+  // Try to publish async event — worker handles counter updates if connected
+  const published = await publish(ROUTING_KEYS.LIKE_CREATED, {
+    targetId: targetId.toString(),
+    targetType,
+    delta: 1,
+  });
+
+  if (!published) {
+    // Fallback to synchronous counter increment if RabbitMQ is not available
+    const Model = targetType === 'post' ? Post : Comment;
+    await Model.updateOne({ _id: targetId }, { $inc: { likeCount: 1 } });
+  }
 
   await cacheService.sAdd(CACHE_KEYS.LIKES(targetType, targetId), userId.toString(), CACHE_TTL.LIKES);
 
