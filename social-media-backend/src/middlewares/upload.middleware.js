@@ -51,9 +51,16 @@ const concurrencyGate = (req, res, next) => {
 
   activeUploads++;
 
-  // Ensure counter is decremented when the response finishes (success or error)
-  res.on('finish', () => { activeUploads--; });
-  res.on('close', () => { activeUploads--; });
+  // Use a flag to prevent double-decrement (both 'finish' and 'close' can fire)
+  let decremented = false;
+  const decrement = () => {
+    if (!decremented) {
+      decremented = true;
+      activeUploads--;
+    }
+  };
+  res.on('finish', decrement);
+  res.on('close', decrement);
 
   // Set a hard timeout — releases the buffer even if Cloudinary hangs
   req.uploadTimeout = setTimeout(() => {
