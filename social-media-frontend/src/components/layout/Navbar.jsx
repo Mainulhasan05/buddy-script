@@ -25,6 +25,7 @@ export default function Navbar() {
     } catch {
       // Logout remains a local success even if the best-effort server cleanup fails.
     } finally {
+      document.cookie = 'isLoggedIn=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
       dispatch(logout());
       dispatch(resetFeed());
       setLoggingOut(false);

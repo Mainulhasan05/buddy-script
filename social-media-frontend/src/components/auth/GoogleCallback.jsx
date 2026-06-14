@@ -27,6 +27,7 @@ export default function GoogleCallback() {
       try {
         dispatch(setAccessToken(accessToken));
         const { data } = await authApi.getMe();
+        document.cookie = 'isLoggedIn=true; path=/; max-age=604800; SameSite=Lax';
         dispatch(setCredentials({ user: data.data, accessToken }));
         router.replace(redirectTo.startsWith('/') ? redirectTo : '/feed');
       } catch {

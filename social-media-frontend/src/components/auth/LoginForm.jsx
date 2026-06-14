@@ -90,6 +90,7 @@ export default function LoginForm() {
 
     try {
       const { data } = await authApi.login(form);
+      document.cookie = 'isLoggedIn=true; path=/; max-age=604800; SameSite=Lax';
       dispatch(setCredentials({ user: data.data.user, accessToken: data.data.accessToken }));
       router.push(redirectTo.startsWith('/') ? redirectTo : '/feed');
     } catch (err) {

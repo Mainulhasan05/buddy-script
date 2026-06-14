@@ -123,6 +123,7 @@ export default function RegisterForm() {
         email: form.email,
         password: form.password,
       });
+      document.cookie = 'isLoggedIn=true; path=/; max-age=604800; SameSite=Lax';
       dispatch(setCredentials({ user: data.data.user, accessToken: data.data.accessToken }));
       router.push(redirectTo.startsWith('/') ? redirectTo : '/feed');
     } catch (err) {

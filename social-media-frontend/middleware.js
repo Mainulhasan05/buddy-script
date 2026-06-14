@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 export function middleware(request) {
   const { pathname } = request.nextUrl;
   const refreshToken = request.cookies.get('refreshToken');
-  const isAuth = Boolean(refreshToken);
+  const isLoggedIn = request.cookies.get('isLoggedIn');
+  const isAuth = Boolean(refreshToken || isLoggedIn);
 
   const protectedRoutes = ['/feed'];
   const authRoutes = ['/login', '/register'];
