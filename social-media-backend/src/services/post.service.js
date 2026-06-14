@@ -5,7 +5,7 @@ const uploadService = require('./upload.service');
 const likeService = require('./like.service');
 const { publish } = require('../config/rabbitmq');
 const { ROUTING_KEYS } = require('../constants/queue.constants');
-const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
+const { CACHE_KEYS, CACHE_TTL, MAX_CACHED_FEED_PAGES } = require('../constants/cache.constants');
 const { buildCursorQuery, encodeCursor } = require('../utils/pagination.util');
 const logger = require('../utils/logger');
 
@@ -52,10 +52,20 @@ const createPost = async ({ userId, content, file, visibility = 'public' }) => {
   // publish() is safe — silently drops if RabbitMQ is not connected
   publish(ROUTING_KEYS.POST_CREATED, { postId: post._id.toString() });
 
-  // Eagerly invalidate feed cache without waiting for worker
-  await cacheService.scanDel('feed:public:*');
+  // Invalidate feed cache — O(1) version increment replaces O(N) SCAN+DEL
+  await cacheService.incrFeedVersion();
 
-  return post;
+  // Return sanitized response — exclude internal fields like image.publicId
+  return {
+    _id: post._id,
+    author: post.author,
+    content: post.content,
+    image: post.image ? { url: post.image.url, width: post.image.width, height: post.image.height } : null,
+    visibility: post.visibility,
+    likeCount: post.likeCount,
+    commentCount: post.commentCount,
+    createdAt: post.createdAt,
+  };
 };
 
 /**
@@ -64,12 +74,17 @@ const createPost = async ({ userId, content, file, visibility = 'public' }) => {
  */
 const getFeed = async ({ cursor, limit = 20, userId }) => {
   limit = Math.min(Number(limit), 50); // cap at 50
-  const cacheKey = CACHE_KEYS.FEED(cursor);
 
-  const cached = await cacheService.get(cacheKey);
+  // Versioned cache key — only cache first N pages for bounded memory usage
+  const feedVersion = await cacheService.getFeedVersion();
+  const pageNum = cursor ? parseInt(Buffer.from(cursor, 'base64').toString().match(/"pageNum":(\d+)/)?.[1] || '1', 10) : 0;
+  const shouldCache = pageNum < MAX_CACHED_FEED_PAGES;
+  const cacheKey = shouldCache ? CACHE_KEYS.FEED(feedVersion, cursor) : null;
+
+  const cached = shouldCache ? await cacheService.get(cacheKey) : null;
   let result;
   if (cached) {
-    result = JSON.parse(JSON.stringify(cached));
+    result = cached; // cacheService.get() already returns a fresh parsed object
   } else {
     const cursorQuery = buildCursorQuery(cursor);
     const posts = await Post.find({
@@ -88,7 +103,9 @@ const getFeed = async ({ cursor, limit = 20, userId }) => {
     const nextCursor = hasMore ? encodeCursor(posts[posts.length - 1]) : null;
     result = { posts, pagination: { nextCursor, hasMore } };
 
-    await cacheService.set(cacheKey, result, CACHE_TTL.FEED);
+    if (shouldCache) {
+      await cacheService.set(cacheKey, result, CACHE_TTL.FEED);
+    }
   }
 
   // Batch resolve isLiked — single $in query instead of N+1
@@ -118,7 +135,7 @@ const getPost = async (postId, requesterId) => {
   const cached = await cacheService.get(cacheKey);
   let post;
   if (cached) {
-    post = JSON.parse(JSON.stringify(cached));
+    post = cached; // cacheService.get() already returns a fresh parsed object
   } else {
     post = await Post.findOne({ _id: postId, deletedAt: null })
       .select(POST_DETAIL_PROJECTION)
@@ -179,7 +196,7 @@ const deletePost = async ({ postId, userId }) => {
   // Invalidate caches for this post and the feed
   await Promise.all([
     cacheService.del(CACHE_KEYS.POST(postId)),
-    cacheService.scanDel('feed:public:*'),
+    cacheService.incrFeedVersion(),
   ]);
 };
 

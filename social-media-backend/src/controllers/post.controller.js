@@ -22,6 +22,8 @@ const getFeed = async (req, res, next) => {
   try {
     const { cursor, limit } = req.query;
     const result = await postService.getFeed({ cursor, limit, userId: req.user?.id });
+    // Allow browser to cache feed for 10s — reduces backend load during rapid scroll
+    res.set('Cache-Control', 'private, max-age=10');
     sendSuccess(res, 'Feed fetched', result.posts, 200, result.pagination);
   } catch (err) {
     next(err);

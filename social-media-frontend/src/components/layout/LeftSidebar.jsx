@@ -87,7 +87,7 @@ export default function LeftSidebar() {
             <div className="_left_inner_area_suggest_info_box">
               <div className="_left_inner_area_suggest_info_image">
                 <a href="#0">
-                  <img src="/assets/images/people1.png" alt="Image" className="_info_img" />
+                  <img src="/assets/images/people1.png" alt="Image" className="_info_img" loading="lazy" />
                 </a>
               </div>
               <div className="_left_inner_area_suggest_info_txt">
@@ -105,7 +105,7 @@ export default function LeftSidebar() {
             <div className="_left_inner_area_suggest_info_box">
               <div className="_left_inner_area_suggest_info_image">
                 <a href="#0">
-                  <img src="/assets/images/people2.png" alt="Image" className="_info_img1" />
+                  <img src="/assets/images/people2.png" alt="Image" className="_info_img1" loading="lazy" />
                 </a>
               </div>
               <div className="_left_inner_area_suggest_info_txt">
@@ -123,7 +123,7 @@ export default function LeftSidebar() {
             <div className="_left_inner_area_suggest_info_box">
               <div className="_left_inner_area_suggest_info_image">
                 <a href="#0">
-                  <img src="/assets/images/people3.png" alt="Image" className="_info_img1" />
+                  <img src="/assets/images/people3.png" alt="Image" className="_info_img1" loading="lazy" />
                 </a>
               </div>
               <div className="_left_inner_area_suggest_info_txt">
@@ -148,7 +148,7 @@ export default function LeftSidebar() {
           <a className="_left_inner_event_card_link" href="#0">
             <div className="_left_inner_event_card">
               <div className="_left_inner_event_card_iamge">
-                <img src="/assets/images/feed_event1.png" alt="Image" className="_card_img" />
+                <img src="/assets/images/feed_event1.png" alt="Image" className="_card_img" loading="lazy" />
               </div>
               <div className="_left_inner_event_card_content">
                 <div className="_left_inner_card_date">
@@ -169,7 +169,7 @@ export default function LeftSidebar() {
           <a className="_left_inner_event_card_link" href="#0">
             <div className="_left_inner_event_card">
               <div className="_left_inner_event_card_iamge">
-                <img src="/assets/images/feed_event1.png" alt="Image" className="_card_img" />
+                <img src="/assets/images/feed_event1.png" alt="Image" className="_card_img" loading="lazy" />
               </div>
               <div className="_left_inner_event_card_content">
                 <div className="_left_inner_card_date">

@@ -119,7 +119,15 @@ export default function PostCard({ post }) {
         {/* Post image */}
         {post.image?.url && (
           <div className="_feed_inner_timeline_image">
-            <img src={post.image.url} alt="Post" className="_time_img" style={{ width: '100%', borderRadius: 8 }} />
+            <img
+              src={post.image.url}
+              alt="Post"
+              className="_time_img"
+              loading="lazy"
+              width={post.image?.width || undefined}
+              height={post.image?.height || undefined}
+              style={{ width: '100%', borderRadius: 8 }}
+            />
           </div>
         )}
       </div>

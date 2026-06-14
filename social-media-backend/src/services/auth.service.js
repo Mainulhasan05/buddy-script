@@ -51,9 +51,8 @@ const issueTokens = async (user, res, meta = {}) => {
   return accessToken;
 };
 
-const getDefaultAvatarUrl = async () => {
-  const userCount = await User.estimatedDocumentCount();
-  const avatarNumber = (userCount % DEFAULT_AVATAR_COUNT) + 1;
+const getDefaultAvatarUrl = () => {
+  const avatarNumber = Math.floor(Math.random() * DEFAULT_AVATAR_COUNT) + 1;
   return `${DEFAULT_AVATAR_BASE_URL}/${avatarNumber}.jpg`;
 };
 

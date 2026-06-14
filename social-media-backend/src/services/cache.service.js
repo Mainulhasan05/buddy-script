@@ -43,9 +43,16 @@ const del = async (...keys) => {
  */
 const sAdd = async (key, member, ttlSeconds) => {
   try {
-    await getRedis().sadd(key, member);
-    if (ttlSeconds) {
-      await getRedis().expire(key, ttlSeconds);
+    const redis = getRedis();
+    if (ttlSeconds && typeof redis.pipeline === 'function') {
+      // Pipeline: send SADD + EXPIRE in a single round trip
+      const pipeline = redis.pipeline();
+      pipeline.sadd(key, member);
+      pipeline.expire(key, ttlSeconds);
+      await pipeline.exec();
+    } else {
+      await redis.sadd(key, member);
+      if (ttlSeconds) await redis.expire(key, ttlSeconds);
     }
   } catch (err) {
     logger.error(`Cache SADD error [${key}]: ${err.message}`);
@@ -94,5 +101,33 @@ const scanDel = async (pattern) => {
   }
 };
 
-module.exports = { get, set, del, sAdd, sIsMember, sRem, scanDel };
+/**
+ * Get the current feed cache version (O(1) GET).
+ * Returns '0' if not set yet.
+ */
+const getFeedVersion = async () => {
+  try {
+    const v = await getRedis().get('feed:version');
+    return v || '0';
+  } catch (err) {
+    logger.error(`Cache feed version GET error: ${err.message}`);
+    return '0';
+  }
+};
+
+/**
+ * Increment the feed cache version (O(1) INCR).
+ * All old feed keys (keyed with previous version) expire naturally via TTL.
+ * This replaces the O(N) SCAN-based invalidation.
+ */
+const incrFeedVersion = async () => {
+  try {
+    return await getRedis().incr('feed:version');
+  } catch (err) {
+    logger.error(`Cache feed version INCR error: ${err.message}`);
+    return null;
+  }
+};
+
+module.exports = { get, set, del, sAdd, sIsMember, sRem, scanDel, getFeedVersion, incrFeedVersion };
 

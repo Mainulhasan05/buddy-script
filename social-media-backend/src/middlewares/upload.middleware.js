@@ -1,4 +1,5 @@
 const multer = require('multer');
+const FileType = require('file-type');
 const { sendError } = require('../utils/response.util');
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -29,8 +30,6 @@ const validateMagicBytes = async (req, res, next) => {
   if (!req.file) return next(); // no file uploaded — skip
 
   try {
-    // file-type v16 is CJS-compatible
-    const FileType = require('file-type');
     const type = await FileType.fromBuffer(req.file.buffer);
 
     if (!type || !ALLOWED_MIME_TYPES.includes(type.mime)) {

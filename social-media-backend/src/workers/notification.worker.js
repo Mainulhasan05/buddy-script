@@ -35,7 +35,7 @@ const startNotificationWorker = async () => {
       try {
         const payload = JSON.parse(msg.content.toString());
         logger.info(`notification.worker: invalidating feed cache for post ${payload.postId}`);
-        await cacheService.scanDel('feed:public:*');
+        await cacheService.incrFeedVersion();
         channel.ack(msg);
       } catch (err) {
         logger.error(`notification.worker: failed to process message — ${err.message}`);

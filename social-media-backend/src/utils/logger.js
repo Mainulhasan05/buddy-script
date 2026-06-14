@@ -16,26 +16,36 @@ const consoleFormat = combine(
 
 const fileFormat = combine(timestamp(), errors({ stack: true }), json());
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+// In production, log only to stdout/stderr — containers should use log aggregators
+// (CloudWatch, Datadog, etc.). File I/O under high load creates bottlenecks.
+const fileTransports = isProduction
+  ? []
+  : [
+      new transports.File({
+        filename: path.join('logs', 'error.log'),
+        level: 'error',
+        format: fileFormat,
+      }),
+      new transports.File({
+        filename: path.join('logs', 'combined.log'),
+        format: fileFormat,
+      }),
+    ];
+
 const logger = createLogger({
-  level: process.env.NODE_ENV === 'production' ? 'warn' : 'info',
+  level: isProduction ? 'warn' : 'info',
   transports: [
     new transports.Console({ format: consoleFormat }),
-    new transports.File({
-      filename: path.join('logs', 'error.log'),
-      level: 'error',
-      format: fileFormat,
-    }),
-    new transports.File({
-      filename: path.join('logs', 'combined.log'),
-      format: fileFormat,
-    }),
+    ...fileTransports,
   ],
-  exceptionHandlers: [
-    new transports.File({ filename: path.join('logs', 'exceptions.log') }),
-  ],
-  rejectionHandlers: [
-    new transports.File({ filename: path.join('logs', 'rejections.log') }),
-  ],
+  exceptionHandlers: isProduction
+    ? [new transports.Console({ format: consoleFormat })]
+    : [new transports.File({ filename: path.join('logs', 'exceptions.log') })],
+  rejectionHandlers: isProduction
+    ? [new transports.Console({ format: consoleFormat })]
+    : [new transports.File({ filename: path.join('logs', 'rejections.log') })],
 });
 
 module.exports = logger;

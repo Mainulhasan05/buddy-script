@@ -39,6 +39,10 @@ const startServer = async () => {
     server = app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT} [${env.NODE_ENV}]`);
     });
+
+    // Prevent 502s behind load balancers — keepAliveTimeout must exceed LB timeout (AWS ALB = 60s)
+    server.keepAliveTimeout = 65000;
+    server.headersTimeout = 66000; // must be > keepAliveTimeout
   } catch (err) {
     logger.error(`Failed to start server: ${err.message}`);
     process.exit(1);

@@ -11,7 +11,7 @@ const BATCH_INTERVAL_MS = 500;
 const MAX_RETRIES = 3;
 const RETRY_HEADER = 'x-retry-count';
 
-// In-memory batch: { key → { model, targetId, delta } }
+// In-memory batch: { key → { model, targetId, delta, msgs[] } }
 let batch = new Map();
 let batchTimer = null;
 
@@ -39,22 +39,24 @@ const flushBatch = async (channel) => {
     if (postOps.length) await Post.bulkWrite(postOps, { ordered: false });
     if (commentOps.length) await Comment.bulkWrite(commentOps, { ordered: false });
 
-    // ACK all messages in batch
+    // ACK all messages in batch — each batch entry may hold multiple messages
     for (const [, item] of current) {
-      channel.ack(item.msg);
+      item.msgs.forEach((m) => channel.ack(m));
     }
     logger.info(`like.worker: flushed ${current.size} updates`);
   } catch (err) {
     logger.error(`like.worker: bulkWrite failed — ${err.message}`);
     // NACK all so they requeue
     for (const [, item] of current) {
-      const retries = (item.msg.properties.headers?.[RETRY_HEADER] || 0) + 1;
-      if (retries >= MAX_RETRIES) {
-        logger.error(`like.worker: max retries reached for msg, dead-lettering`);
-        channel.nack(item.msg, false, false); // discard after max retries
-      } else {
-        channel.nack(item.msg, false, true); // requeue
-      }
+      item.msgs.forEach((m) => {
+        const retries = (m.properties.headers?.[RETRY_HEADER] || 0) + 1;
+        if (retries >= MAX_RETRIES) {
+          logger.error(`like.worker: max retries reached for msg, dead-lettering`);
+          channel.nack(m, false, false); // discard after max retries
+        } else {
+          channel.nack(m, false, true); // requeue
+        }
+      });
     }
   }
 };
@@ -105,8 +107,9 @@ const startLikeWorker = async () => {
       const existing = batch.get(key);
       if (existing) {
         existing.delta += delta;
+        existing.msgs.push(msg); // accumulate ALL messages for proper ACK
       } else {
-        batch.set(key, { targetId: new mongoose.Types.ObjectId(targetId), targetType, delta, msg });
+        batch.set(key, { targetId: new mongoose.Types.ObjectId(targetId), targetType, delta, msgs: [msg] });
       }
 
       if (batch.size >= BATCH_SIZE) {

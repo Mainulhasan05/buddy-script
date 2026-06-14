@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const compression = require('compression');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const mongoSanitize = require('express-mongo-sanitize');
@@ -45,6 +46,9 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+
+// Response compression — gzip/brotli for all responses (70-80% size reduction)
+app.use(compression());
 
 // HTTP request logging (skip in test env)
 if (env.NODE_ENV !== 'test') {

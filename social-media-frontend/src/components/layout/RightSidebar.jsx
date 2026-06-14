@@ -18,7 +18,7 @@ export default function RightSidebar() {
             <div className="_right_inner_area_info_box">
               <div className="_right_inner_area_info_box_image">
                 <a href="#0">
-                  <img src="/assets/images/Avatar.png" alt="Image" className="_ppl_img" />
+                  <img src="/assets/images/Avatar.png" alt="Image" className="_ppl_img" loading="lazy" />
                 </a>
               </div>
               <div className="_right_inner_area_info_box_txt">
@@ -58,7 +58,7 @@ export default function RightSidebar() {
               <div className="_feed_right_inner_area_card_ppl_box">
                 <div className="_feed_right_inner_area_card_ppl_image">
                   <a href="#0">
-                    <img src="/assets/images/people1.png" alt="" className="_box_ppl_img" />
+                    <img src="/assets/images/people1.png" alt="" className="_box_ppl_img" loading="lazy" />
                   </a>
                 </div>
                 <div className="_feed_right_inner_area_card_ppl_txt">
@@ -76,7 +76,7 @@ export default function RightSidebar() {
               <div className="_feed_right_inner_area_card_ppl_box">
                 <div className="_feed_right_inner_area_card_ppl_image">
                   <a href="#0">
-                    <img src="/assets/images/people2.png" alt="" className="_box_ppl_img" />
+                    <img src="/assets/images/people2.png" alt="" className="_box_ppl_img" loading="lazy" />
                   </a>
                 </div>
                 <div className="_feed_right_inner_area_card_ppl_txt">
@@ -96,7 +96,7 @@ export default function RightSidebar() {
               <div className="_feed_right_inner_area_card_ppl_box">
                 <div className="_feed_right_inner_area_card_ppl_image">
                   <a href="#0">
-                    <img src="/assets/images/people3.png" alt="" className="_box_ppl_img" />
+                    <img src="/assets/images/people3.png" alt="" className="_box_ppl_img" loading="lazy" />
                   </a>
                 </div>
                 <div className="_feed_right_inner_area_card_ppl_txt">
@@ -116,7 +116,7 @@ export default function RightSidebar() {
               <div className="_feed_right_inner_area_card_ppl_box">
                 <div className="_feed_right_inner_area_card_ppl_image">
                   <a href="#0">
-                    <img src="/assets/images/people1.png" alt="" className="_box_ppl_img" />
+                    <img src="/assets/images/people1.png" alt="" className="_box_ppl_img" loading="lazy" />
                   </a>
                 </div>
                 <div className="_feed_right_inner_area_card_ppl_txt">
@@ -134,7 +134,7 @@ export default function RightSidebar() {
               <div className="_feed_right_inner_area_card_ppl_box">
                 <div className="_feed_right_inner_area_card_ppl_image">
                   <a href="#0">
-                    <img src="/assets/images/people2.png" alt="" className="_box_ppl_img" />
+                    <img src="/assets/images/people2.png" alt="" className="_box_ppl_img" loading="lazy" />
                   </a>
                 </div>
                 <div className="_feed_right_inner_area_card_ppl_txt">

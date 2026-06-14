@@ -3,8 +3,6 @@ const Post = require('../models/Post.model');
 const User = require('../models/User.model');
 const cacheService = require('./cache.service');
 const likeService = require('./like.service');
-const { publish } = require('../config/rabbitmq');
-const { ROUTING_KEYS } = require('../constants/queue.constants');
 const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
 const { buildCursorQuery, encodeCursor } = require('../utils/pagination.util');
 const logger = require('../utils/logger');
@@ -53,15 +51,7 @@ const addComment = async ({ postId, userId, content }) => {
     content,
   });
 
-  // Publish async event — worker will $inc post.commentCount
-  // publish() is safe — silently drops if RabbitMQ is not connected
-  publish(ROUTING_KEYS.COMMENT_CREATED, {
-    postId: postId.toString(),
-    commentId: comment._id.toString(),
-    delta: 1,
-  });
-
-  // Synchronous fallback: directly increment commentCount when no workers
+  // Synchronous counter update — no async worker exists for comment counting
   await Post.updateOne({ _id: postId }, { $inc: { commentCount: 1 } });
 
   // Invalidate comment cache for this post
@@ -102,14 +92,7 @@ const addReply = async ({ commentId, userId, content }) => {
     content,
   });
 
-  // Publish async event for reply count
-  publish(ROUTING_KEYS.COMMENT_CREATED, {
-    postId: parent.postId.toString(),
-    commentId: commentId.toString(),
-    replyDelta: 1,
-  });
-
-  // Synchronous fallback: directly increment replyCount on parent comment
+  // Synchronous counter update — no async worker exists for reply counting
   await Comment.updateOne({ _id: commentId }, { $inc: { replyCount: 1 } });
 
   return reply;
@@ -126,7 +109,7 @@ const getComments = async ({ postId, cursor, limit = 20, userId }) => {
   const cached = await cacheService.get(cacheKey);
   let result;
   if (cached) {
-    result = JSON.parse(JSON.stringify(cached));
+    result = cached; // cacheService.get() already returns a fresh parsed object
   } else {
     const cursorQuery = buildCursorQuery(cursor);
 
