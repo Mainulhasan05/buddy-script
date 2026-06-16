@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useDispatch, useSelector } from 'react-redux';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -74,9 +75,11 @@ export default function Navbar() {
             style={{ cursor: 'pointer' }}
           >
             <div className="_header_nav_profile_image">
-              <img
+              <Image
                 src={user?.avatar?.url || '/assets/images/profile.png'}
-                alt={user?.firstName}
+                alt={user?.firstName || 'Profile'}
+                width={44}
+                height={44}
                 className="_nav_profile_img"
               />
             </div>
@@ -104,9 +107,11 @@ export default function Navbar() {
               >
                 <div className="_nav_profile_dropdown_info">
                   <div className="_nav_profile_dropdown_image">
-                    <img
+                    <Image
                       src={user?.avatar?.url || '/assets/images/profile.png'}
                       alt=""
+                      width={44}
+                      height={44}
                       className="_nav_drop_img"
                     />
                   </div>

@@ -55,7 +55,7 @@ postSchema.index({ 'author._id': 1, deletedAt: 1, createdAt: -1, _id: -1 });
 // Partial index for soft-deleted documents — only indexes deleted posts (small, for admin queries)
 postSchema.index(
   { deletedAt: 1 },
-  { partialFilterExpression: { deletedAt: { $ne: null } }, sparse: true }
+  { partialFilterExpression: { deletedAt: { $type: 'date' } } }
 );
 
 const Post = mongoose.model('Post', postSchema);

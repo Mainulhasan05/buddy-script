@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import Image from 'next/image';
 import { useDispatch, useSelector } from 'react-redux';
 import { closeCreatePostModal, showToast } from '@/src/store/slices/uiSlice';
 import { prependPost, setCreating } from '@/src/store/slices/feedSlice';
@@ -108,9 +109,11 @@ export default function CreatePostModal() {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img
+            <Image
               src={user?.avatar?.url || '/assets/images/txt_img.png'}
               alt=""
+              width={40}
+              height={40}
               style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }}
             />
             <span style={{ fontWeight: 600 }}>{user?.firstName} {user?.lastName}</span>

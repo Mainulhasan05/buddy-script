@@ -3,12 +3,10 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const compression = require('compression');
-const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const mongoSanitize = require('express-mongo-sanitize');
 
 const env = require('./config/env');
-const logger = require('./utils/logger');
 const errorMiddleware = require('./middlewares/error.middleware');
 const requestTimer = require('./middlewares/requestTimer.middleware');
 const routes = require('./routes/index');
@@ -51,14 +49,10 @@ app.use(
 // Response compression — gzip/brotli for all responses (70-80% size reduction)
 app.use(compression());
 
-// HTTP request logging (skip in test env)
-if (env.NODE_ENV !== 'test') {
-  app.use(
-    morgan('combined', {
-      stream: { write: (msg) => logger.info(msg.trim()) },
-    })
-  );
-}
+// NOTE: per-request access logging is handled by requestTimer (below), which also
+// carries the latency signal. A second `morgan('combined')` logger was removed — it
+// duplicated every line and rebuilt the combined-log string on every request even
+// when the log level dropped it in production.
 
 const createLimiter = require('./utils/rate-limiter.util');
 

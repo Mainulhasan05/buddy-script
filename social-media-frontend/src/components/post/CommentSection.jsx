@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useDispatch, useSelector } from 'react-redux';
 import { commentApi } from '@/src/api/comment.api';
 import CommentItem from './CommentItem';
@@ -79,9 +80,11 @@ export default function CommentSection({ postId }) {
         <form className="_feed_inner_comment_box_form" onSubmit={submitComment}>
           <div className="_feed_inner_comment_box_content">
             <div className="_feed_inner_comment_box_content_image">
-              <img
+              <Image
                 src={user?.avatar?.url || '/assets/images/comment_img.png'}
                 alt=""
+                width={44}
+                height={44}
                 className="_comment_img"
               />
             </div>

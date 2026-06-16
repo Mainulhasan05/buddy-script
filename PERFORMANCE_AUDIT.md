@@ -1,440 +1,160 @@
-# Performance Audit
-
-Application: Buddy Script social media platform  
-Audit date: 2026-06-14  
-Scope: `social-media-backend`, `social-media-frontend`, deployment config, static template assets  
-Status: Audit complete; implementation intentionally paused pending approval.
-
-## Executive Summary
-
-The codebase already includes several good performance foundations: cursor pagination, `.lean()` reads, denormalized author snapshots, denormalized like/comment counters, bounded page sizes, Redis cache wrappers, versioned feed cache invalidation, RabbitMQ worker scaffolding, gzip compression, and MongoDB compound indexes for the main feed and comment paths.
-
-The highest-risk performance issue is the like counter architecture. `like.service.js` updates counters synchronously and also publishes like events. When RabbitMQ is configured, `like.worker.js` consumes those same events and updates the counters again. This creates duplicate writes, incorrect counters, extra database load, and cache drift. Fixing that is high ROI because it reduces write amplification and prevents data corruption.
-
-The next largest opportunities are cache invalidation correctness for comment pages, frontend asset delivery and rendering, upload memory pressure, and operational guardrails around queue publishing and MongoDB pool sizing.
-
-## Architecture Observed
-
-| Area | Current design | Performance notes |
-|---|---|---|
-| Backend | Express 4 route -> controller -> service pattern | Simple and maintainable; no excessive dependency graph observed. |
-| Database | MongoDB via Mongoose | Uses query-specific indexes, lean reads, cursor pagination, denormalized snapshots. |
-| Cache | Redis via `ioredis`, optional no-op fallback | Feed, post, comment, and like-state caches exist; invalidation has gaps. |
-| Queue | RabbitMQ via `amqplib`, optional fallback | Worker batching exists, but counter ownership conflicts with synchronous updates. |
-| Frontend | Next.js 16 App Router, React 19, Redux Toolkit, Axios | Mostly client-rendered feed; static template CSS/images/fonts loaded globally. |
-| Media | Multer memory storage -> Cloudinary upload stream | Simple path, but memory pressure grows with concurrent 5 MB uploads. |
-| Deployment | Netlify frontend config only | No backend process/container config found in this repo. |
-
-## Positive Findings
-
-- Feed and comment endpoints avoid `skip()` and use cursor pagination.
-- Feed, posts, comments, replies, and like-state reads use bounded `limit` values.
-- Feed and comment list reads use `.lean()` to avoid Mongoose document hydration overhead.
-- Posts and comments store an author snapshot, avoiding feed-time `populate()` or `$lookup`.
-- Likes have a compound unique index to enforce idempotence.
-- Comments and replies have compound indexes aligned with their read paths.
-- Feed cache invalidation uses a version key instead of scanning and deleting all feed keys.
-- Rate limiters can use Redis when available and fall back in development.
-- HTTP compression is enabled globally.
-
-## Bottlenecks And Risks
-
-### P0. Like counters are double-updated when RabbitMQ is enabled
-
-Evidence:
-- `social-media-backend/src/services/like.service.js` performs `Model.updateOne(... $inc likeCount ...)` on every like/unlike.
-- The same service publishes `LIKE_CREATED` and `LIKE_DELETED`.
-- `social-media-backend/src/workers/like.worker.js` consumes those events and performs `bulkWrite` `$inc` updates again.
-
-Impact: Critical. Like counts can drift by 2x, and every like action creates both a direct write and a queued write. Under high reaction traffic this doubles counter write load and makes reads unreliable.
-
-Root cause: Counter ownership is split between the synchronous request path and the async worker path.
-
-Recommended fix: Choose one counter owner. The lowest-risk fix is to keep synchronous counter updates for now and stop publishing like counter events or stop starting the like counter worker. The more scalable fix is to remove synchronous counter updates and make the worker the single owner, with a fallback path only when RabbitMQ is unavailable.
-
-Risk: Medium if switching to fully async counters because UI/read-after-write semantics change slightly. Low if disabling duplicate queue updates while preserving synchronous updates.
-
-Expected gains:
-- Response time: modest improvement if queue publish is removed from hot like path.
-- Throughput: high improvement for like-heavy workloads due to fewer writes.
-- Memory: neutral.
-- Database load: high reduction, roughly one avoided counter write per like event when RabbitMQ is enabled.
-- Infrastructure cost: lower MongoDB write IOPS and queue traffic.
-
-### P1. Comment cache invalidation deletes the wrong key
-
-Evidence:
-- `getComments` reads and writes keys like `post:${postId}:first:comments` through `CACHE_KEYS.POST_COMMENTS(`${postId}:${cursor || 'first'}`)`.
-- `addComment` invalidates `CACHE_KEYS.POST_COMMENTS(postId)`, which is a different key and will not clear cached comment pages.
-
-Impact: High. Users can see stale comments for up to the cache TTL. Stale comment pages also waste cache memory because invalidation is ineffective.
-
-Root cause: The same key helper is used for both a post-level namespace and a page-level cache key, but invalidation calls only the base post id.
-
-Recommended fix: Introduce a versioned comment cache namespace per post, similar to feed versioning, or maintain a short targeted page-key pattern and use safe scan/delete only for that post's comment keys.
-
-Risk: Low to medium. Versioned cache is safer than pattern deletion and avoids broad scans.
-
-Expected gains:
-- Response time: improved freshness; cache hit quality improves.
-- Throughput: fewer unnecessary DB reloads caused by stale/mismatched invalidation behavior.
-- Memory: less orphaned cache data.
-- Database load: reduced after writes because caches are coherent.
-- Infrastructure cost: lower Redis waste and fewer support/debug cycles.
-
-### P1. Feed cache page selection is ineffective
-
-Evidence:
-- `getFeed` attempts to infer `pageNum` from a decoded cursor using a `"pageNum"` field.
-- `encodeCursor` only stores `{ createdAt, _id }`, not `pageNum`.
-- As a result, `pageNum` is effectively always `1` for cursor pages and all cursor pages may be considered cacheable despite `MAX_CACHED_FEED_PAGES`.
-
-Impact: Medium to high depending on traffic depth. Deep feed pages have low cache reuse and can expand Redis memory usage.
-
-Root cause: Cache policy depends on a field that the cursor encoder never emits.
-
-Recommended fix: Either remove page-number logic and only cache the first page, or encode page depth in a separate client/server pagination metadata field. The lowest-risk change is first-page-only cache.
-
-Risk: Low.
-
-Expected gains:
-- Response time: neutral for first page, possibly slightly lower cache hit rate for deep pages but avoids low-value caching.
-- Throughput: neutral to positive.
-- Memory: lower Redis memory growth.
-- Database load: may increase slightly for deep pages but those pages have low reuse.
-- Infrastructure cost: lower Redis cost.
-
-### P1. Frontend ships global template CSS and many static assets without Next image optimization
-
-Evidence:
-- `app/layout.js` globally loads Bootstrap plus `common.css`, `main.css`, and `responsive.css`.
-- Components render many plain `<img>` tags from `/assets/images/...`.
-- `next.config.mjs` has no image `remotePatterns`, cache header customization, bundle analyzer, or asset optimization settings.
-
-Impact: High for first-load and mobile performance. Global CSS blocks rendering across all routes, unused template rules inflate CSS cost, and plain `<img>` misses Next image sizing, optimization, and priority controls.
-
-Root cause: Template assets were integrated wholesale into the App Router rather than split by route/component and optimized through Next's asset pipeline.
-
-Recommended fix: Measure bundle and asset weights with `next build` and analyzer, then prioritize route-scoped CSS, replacing high-impact feed/auth images with `next/image`, adding remote Cloudinary image config, and pruning unused public/template duplicates.
-
-Risk: Medium because template CSS may be tightly coupled to markup.
-
-Expected gains:
-- Response time: faster FCP/LCP on auth and feed pages.
-- Throughput: lower CDN/network transfer.
-- Memory: lower browser memory and style recalculation cost.
-- Database load: neutral.
-- Infrastructure cost: lower bandwidth.
-
-### P1. Upload path buffers entire files in memory
-
-Evidence:
-- `upload.middleware.js` uses `multer.memoryStorage()`.
-- Upload limit is 5 MB, and `upload.service.js` streams the in-memory buffer to Cloudinary.
-
-Impact: Medium to high under concurrent image uploads. Ten concurrent uploads can hold around 50 MB plus overhead in Node heap/external memory before Cloudinary finishes.
-
-Root cause: Memory storage is simple but scales with upload concurrency and file size.
-
-Recommended fix: Stream uploads directly to Cloudinary where possible, or keep memory storage but lower per-process upload concurrency, add stricter timeout/backpressure handling, and monitor memory.
-
-Risk: Medium if changing upload flow; low if adding guardrails and monitoring first.
-
-Expected gains:
-- Response time: neutral to improved under contention.
-- Throughput: better upload stability.
-- Memory: significant reduction under concurrent uploads.
-- Database load: neutral.
-- Infrastructure cost: fewer larger Node instances needed for upload bursts.
-
-### P2. MongoDB pool configuration may be oversized for small deployments
-
-Evidence:
-- `config/db.js` sets `maxPoolSize: 100` and `minPoolSize: 10`.
-
-Impact: Medium. In multi-instance deployments, this can create too many idle MongoDB connections. For example, 10 instances imply up to 1,000 connections.
-
-Root cause: Static pool sizing is not tied to instance count, CPU, expected concurrency, or MongoDB Atlas tier.
-
-Recommended fix: Move pool sizes to environment variables with conservative defaults and document sizing guidance.
-
-Risk: Low.
-
-Expected gains:
-- Response time: more predictable under deployment scale.
-- Throughput: neutral unless current pool causes saturation.
-- Memory: lower process and MongoDB connection memory.
-- Database load: lower connection overhead.
-- Infrastructure cost: reduced risk of needing a larger Atlas tier due to connection pressure.
-
-### P2. RabbitMQ publish path is fire-and-forget without confirms
-
-Evidence:
-- `config/rabbitmq.js` uses a regular channel and does not inspect the boolean return from `ch.publish`.
-- Events are silently dropped when the channel is unavailable.
-
-Impact: Medium. For non-critical analytics this is acceptable. For counter ownership or cache invalidation, lost events can cause stale caches or incorrect counters.
-
-Root cause: Queue is configured as graceful-degradation infrastructure but some events are semantically important.
-
-Recommended fix: If queues own counters/invalidation, use confirm channels, retry/backpressure handling, and clear ownership rules. If queues are best-effort only, do not use them for critical derived state.
-
-Risk: Medium.
-
-Expected gains:
-- Response time: slight overhead with confirms.
-- Throughput: more predictable under broker pressure.
-- Memory: neutral.
-- Database load: depends on chosen counter design.
-- Infrastructure cost: lower data-repair cost.
-
-### P2. Refresh token lookup depends on unique index but user/session cleanup is limited
-
-Evidence:
-- `RefreshToken` has unique `token`, TTL `expiresAt`, and `userId` index.
-- `auth.service.js` creates a new refresh token on every login/refresh and deletes only the rotated token.
-
-Impact: Medium for long-lived active users with many devices/refreshes. TTL eventually cleans up, but active churn can grow token rows.
-
-Root cause: No per-user/session cap or bulk cleanup strategy.
-
-Recommended fix: Add optional max active sessions per user, delete older tokens per user after issuing, and use `.lean()` where public JSON transformation is not needed.
-
-Risk: Medium because session behavior changes.
-
-Expected gains:
-- Response time: lower token collection size over time.
-- Throughput: lower auth DB churn.
-- Memory: lower index memory.
-- Database load: lower token storage and cleanup load.
-- Infrastructure cost: lower storage/index growth.
-
-### P2. API payloads include repeated author snapshots and full template-era field names
-
-Evidence:
-- Feed pages return author snapshot for every post. This is intentionally denormalized and avoids joins.
-- Payloads are not compressed at object level beyond HTTP compression.
-
-Impact: Low to medium. The tradeoff is currently reasonable because it avoids lookups, but repeated author data increases transfer size for users with many posts from the same authors.
-
-Root cause: Read-optimized denormalization.
-
-Recommended fix: Do not change yet. Revisit only if payload measurements show feed payload size as a top contributor. Possible later option: compact response DTOs or normalize authors in API response.
-
-Risk: Medium because frontend contract changes.
-
-Expected gains:
-- Response time: lower network transfer if implemented.
-- Throughput: lower bandwidth.
-- Memory: lower client Redux memory.
-- Database load: neutral.
-- Infrastructure cost: lower egress.
-
-### P2. Client feed grows unbounded in Redux during infinite scroll
-
-Evidence:
-- `feedSlice.js` appends every fetched page to `state.posts`.
-- No windowing, list virtualization, or max retained page count exists.
-
-Impact: Medium for long scrolling sessions. Browser memory and render time increase as the array grows.
-
-Root cause: Infinite scroll stores and renders all loaded posts.
-
-Recommended fix: Add virtualization or bounded retention after measuring typical session length. Use memoized post rows and stable callbacks first.
-
-Risk: Medium because virtualization can affect layout and scroll behavior.
-
-Expected gains:
-- Response time: smoother long sessions.
-- Throughput: neutral.
-- Memory: lower browser memory.
-- Database load: neutral.
-- Infrastructure cost: neutral.
-
-### P3. Comment/reply creation uses sequential database operations
-
-Evidence:
-- `addComment` checks post existence, fetches user snapshot, creates comment, then increments post counter.
-- `addReply` checks parent, fetches user snapshot, creates reply, then increments reply counter.
-
-Impact: Low to medium. Writes are clear and safe, but request latency includes multiple sequential DB round trips.
-
-Root cause: Simple service flow; no transaction or bulk composition.
-
-Recommended fix: Keep for now unless write latency is measured as a problem. Later, parallelize independent reads (`post`/`user`) and consider async counter ownership for comments.
-
-Risk: Low for parallel independent reads; medium for async counters.
-
-Expected gains:
-- Response time: moderate improvement on comment writes.
-- Throughput: slight improvement.
-- Memory: neutral.
-- Database load: neutral number of queries, shorter request time.
-- Infrastructure cost: neutral.
-
-### P3. Runtime observability is insufficient for re-measurement
-
-Evidence:
-- No endpoint timing middleware, query explain tooling, request histogram, or frontend bundle analyzer config was found.
-
-Impact: Medium for ongoing performance work. Optimizations cannot be confidently ranked without timing, payload, and query metrics.
-
-Root cause: Performance telemetry is not yet part of the app.
-
-Recommended fix: Add lightweight request duration logging, slow query logging in development/staging, and documented benchmark commands before deeper refactors.
-
-Risk: Low.
-
-Expected gains:
-- Response time: indirect.
-- Throughput: indirect.
-- Memory: neutral.
-- Database load: indirect.
-- Infrastructure cost: prevents low-ROI work.
-
-## Database Review
-
-### Query plans and index usage
-
-Current index coverage is mostly appropriate:
-
-- Feed: `{ deletedAt: 1, visibility: 1, createdAt: -1, _id: -1 }`
-- My posts: `{ 'author._id': 1, deletedAt: 1, createdAt: -1, _id: -1 }`
-- Comments: `{ postId: 1, parentId: 1, deletedAt: 1, createdAt: 1, _id: 1 }`
-- Replies: `{ parentId: 1, deletedAt: 1, createdAt: 1, _id: 1 }`
-- Likes: unique `{ userId: 1, targetId: 1, targetType: 1 }`, target lookup `{ targetId: 1, targetType: 1, createdAt: -1 }`
-- Refresh tokens: unique token plus TTL index
-
-No obvious N+1 query remains in feed, comments, or replies. Batch like-state lookup is already in place.
-
-Recommended query-plan work:
-
-- Run `.explain('executionStats')` for feed, my posts, comments, replies, and likers on production-like data.
-- Validate that cursor `$or` queries use compound indexes without blocking sort.
-- Validate `Like.aggregate` uses `{ targetId, targetType, createdAt }` before `$lookup`.
-
-### Pagination
-
-The code correctly avoids `skip()`. Cursor encoding is stable using `createdAt` and `_id`. The main issue is cache page-depth detection, not pagination correctness.
-
-### Aggregate queries
-
-`getLikers` uses `$lookup` after `$match`, `$sort`, and `$limit`, which is the right order. It is acceptable because the "who liked" modal is not the hottest path.
-
-## Application Layer Review
-
-The service layer is straightforward. The main performance/correctness issue is ownership of derived counters. Validation overhead from Zod is acceptable and bounded. Serialization overhead is also reasonable due to projections and lean reads.
-
-Potential improvements:
-
-- Add DTO functions for response shaping if payload size becomes measurable pain.
-- Avoid importing unused modules such as unused loggers where present only after lint confirmation.
-- Parallelize independent read operations in comment creation only after tests are added.
-
-## Caching Review
-
-Current cache strengths:
-
-- Feed cache is versioned and TTL-bound.
-- Post detail cache exists.
-- Comment page cache exists.
-- Like-state Redis sets exist with TTL.
-
-Current cache risks:
-
-- Comment invalidation misses page keys.
-- Feed page-depth cache bound is ineffective.
-- Like-state sets can represent only known liked users; negative states are not cached, so repeated negative checks hit DB for single-detail views.
-- Cache fallback silently disables cache when Redis is absent; fine for dev, risky if production accidentally lacks Redis.
-
-## Queue Review
-
-RabbitMQ is optional and graceful. That is useful for local development, but queue-dependent work must not be both critical and best-effort.
-
-Current queue risks:
-
-- Like worker duplicates synchronous counter updates.
-- Retry headers are read but not incremented on requeue, so retry counting may not work as intended.
-- Worker and app create separate RabbitMQ connections/channels.
-- Publish does not use confirms or backpressure handling.
-
-## API Performance Review
-
-Hot endpoints:
-
-- `GET /api/posts/feed`
-- `POST /api/likes/toggle`
-- `GET /api/posts/:postId/comments`
-- `POST /api/posts/:postId/comments`
-- `GET /api/comments/:commentId/replies`
-
-Strengths:
-
-- Bounded limits.
-- Compression.
-- Cursor pagination.
-- Private `Cache-Control` on feed.
-
-Risks:
-
-- Like toggle write amplification.
-- Stale comment cache.
-- Upload request memory pressure.
-- No endpoint latency budget or measurement harness.
-
-## Frontend Performance Review
-
-Strengths:
-
-- Feed uses pagination and lazy image loading for post images.
-- Infinite scroll avoids manual scroll listeners by using `IntersectionObserver`.
-- React Compiler is enabled.
-
-Risks:
-
-- Feed is fully client-rendered.
-- Global template CSS is loaded for all routes.
-- Many plain `<img>` tags bypass Next image optimization.
-- Infinite feed state and rendered DOM grow without virtualization.
-- Auth and feed pages load template assets that may not be needed for the current route.
-
-## Infrastructure Review
-
-Observed:
-
-- Netlify frontend deployment config exists.
-- Backend deployment/container/process manager config was not found.
-- MongoDB pool is statically configured.
-- Redis and RabbitMQ are optional and can silently degrade.
-
-Recommended:
-
-- Add backend deployment documentation with worker process topology.
-- Configure environment-driven MongoDB pool sizes.
-- Make production fail fast when required performance infrastructure is missing, or explicitly document degraded mode.
-
-## Prioritized ROI Summary
-
-| Priority | Optimization | Impact | Risk | ROI |
-|---|---|---:|---:|---:|
-| P0 | Fix like counter ownership/double updates | Very high | Low-medium | Very high |
-| P1 | Fix comment cache invalidation | High | Low-medium | Very high |
-| P1 | Correct feed cache page-bounding | Medium-high | Low | High |
-| P1 | Measure and optimize frontend asset loading | High | Medium | High |
-| P1 | Add upload memory guardrails | Medium-high | Low-medium | High |
-| P2 | Env-driven MongoDB pool sizing | Medium | Low | Medium-high |
-| P2 | Clarify RabbitMQ reliability/confirm behavior | Medium | Medium | Medium |
-| P2 | Add performance instrumentation | Medium | Low | Medium |
-| P2 | Bound or virtualize long feed sessions | Medium | Medium | Medium |
-| P3 | Parallelize comment creation reads | Low-medium | Low | Medium |
-
-## Measurement Gaps
-
-No live benchmark or production telemetry was available during this audit. Expected gains are estimates from static analysis. Before and after implementation, measure:
-
-- p50/p95/p99 latency for feed, like toggle, comments, replies, auth refresh, and upload.
-- MongoDB query execution stats and index usage.
-- Redis hit rate and memory usage by key prefix.
-- RabbitMQ queue depth, publish failures, consumer lag, and dead-letter count.
-- Next.js build output, route JS size, CSS size, LCP, CLS, INP, and image transfer size.
-
+# Performance Audit — Buddy Script Platform
+
+**Application**: Buddy Script — social media platform (target scale: millions of student users)
+**Audit Date**: 2026-06-16
+**Auditor role**: Principal Software Architect / Performance Engineer
+**Scope**: `social-media-backend`, `social-media-frontend`, MongoDB, Redis, RabbitMQ, asset delivery, deployment/runtime config
+**Method**: Full source read of services, models, config, workers, middleware, routes, and frontend feed/auth/layout. Findings below are grounded in specific files and lines, not assumptions.
+
+> **Status note.** A previous audit (2026-06-15) marked most backend work "SOLVED." This audit **independently verified those claims against the code** — most hold up and are genuinely good. However, the prior audit (a) declared the work essentially finished, (b) presented the RabbitMQ `waitForConfirms()` change as a pure win when it is in fact a **latency regression on the hottest endpoint**, and (c) left real, measurable bottlenecks unaddressed. This document supersedes it.
+
+---
+
+## 1. Executive Summary
+
+The backend architecture is solid: denormalized author snapshots, cursor pagination, compound indexes matching every hot query, versioned O(1) cache invalidation, batched async like-counter updates, and upload guardrails. These are real and verified.
+
+The highest-value **remaining** opportunities, in ROI order, are:
+
+1. **[Backend] `publish()` blocks every like/post request on a broker round-trip** (`waitForConfirms()` + `persistent: true`). This silently re-couples the async path it was meant to decouple. **Highest ROI: high impact, low risk.**
+2. **[Frontend] ~338 KB of render-blocking template CSS** loaded via four raw `<link>` tags, bypassing the Next.js asset pipeline (no hashing, minification beyond source, splitting, or framework-managed caching).
+3. **[Frontend] Almost all images use raw `<img>`** (only the post image uses `next/image`), and **~10 MB of large unused template PNGs** ship in `public/`.
+4. **[Frontend] The feed is 100% client-rendered**; initial data is fetched only after hydration, so LCP is gated on JS download + an API round-trip.
+5. **[Backend] Several smaller hot-path inefficiencies**: duplicate per-request logging, two sequential Redis round-trips on feed reads, in-process workers sharing the API event loop, single-core (no clustering).
+
+No correctness or data-integrity bugs were found in the read paths. The concerns are latency, throughput, bandwidth, and infrastructure cost.
+
+---
+
+## 2. Architecture Summary (verified)
+
+| Component | Implementation | Verified strengths | Verified concerns |
+|---|---|---|---|
+| **API** | Express 4, route → controller → service | Lean projections, compression, helmet, graceful shutdown, keep-alive tuned for ALB | Workers run **in-process**; single core; double request logging |
+| **DB** | MongoDB + Mongoose 8 | Compound indexes match every hot query; cursor pagination; `.lean()` everywhere; env-driven pool | Session-cap enforcement does find-all+deleteMany on every auth (bounded) |
+| **Cache** | Redis (ioredis), cache-first reads | Versioned O(1) invalidation (feed + comments); user-agnostic feed cache; noop fallback | Feed read = 2 sequential round-trips (version GET, then payload GET) |
+| **Queue** | RabbitMQ (amqplib), confirm channel | Batched like-counter worker (100/500 ms), DLQ, bounded retries, idempotent-ish bulk `$inc` | **`waitForConfirms()` on the request hot path** (see F1) |
+| **Media** | Multer memory → Cloudinary stream | Concurrency gate (10), 30 s timeout, magic-byte validation | — |
+| **Frontend** | Next.js 16 App Router + Redux Toolkit | `next/image` for post images; AVIF/WebP config; 200-post retention cap | Render-blocking CSS; raw `<img>`; client-only feed; unused heavy assets |
+
+---
+
+## 3. Verified-Solved Items (kept, not re-doing)
+
+These were claimed solved and **confirmed correct in code**:
+
+- **No N+1 on read paths.** `getFeed`, `getMyPosts`, `getComments`, `getReplies` all resolve `isLiked` via a single batched `$in` query (`likeService.getBatchLikeState`). `getLikers` uses application-level hydration (one `Like` query + one `User` `$in`) instead of `$lookup`. ✔ `post.service.js:114-126`, `like.service.js:188-200`
+- **Indexes match queries.** Feed `{deletedAt,visibility,createdAt,_id}`, user posts `{author._id,...}`, comments `{postId,parentId,...}` and `{parentId,...}`, likes unique `{userId,targetId,targetType}` + `{targetId,targetType,createdAt}`. ✔ model files
+- **Versioned O(1) cache invalidation** for feed and comments (INCR a version counter; old keys expire by TTL). ✔ `cache.service.js:108-157`
+- **Feed cache is first-page-only and user-agnostic** (isLiked layered on after cache read). ✔ `post.service.js:80-126`
+- **Like counters are batched** in the worker with DLQ + retry header. ✔ `like.worker.js`
+- **Upload guardrails**: concurrency gate + timeout + magic bytes. ✔ `upload.middleware.js`
+- **Session cap** (5) and **refresh-token TTL index**. ✔ `auth.service.js:54-62`, `RefreshToken.model.js:34`
+- **Client feed retention cap** (200). ✔ `feedSlice.js:11`
+- **`next/image` + AVIF/WebP** for post images. ✔ `PostCard.jsx:123`, `next.config`
+
+---
+
+## 4. Identified Bottlenecks (remaining)
+
+Each finding: evidence → root cause → impact → fix → risk → expected gains.
+
+### F1 — [P0] `publish()` blocks the request on a broker confirm (hot path)
+- **Evidence**: `rabbitmq.js:65-85` — `publish()` calls `ch.publish(..., { persistent: true })` then `await ch.waitForConfirms()`. It is `await`ed inside `like.service.toggle()` (`like.service.js:24,58`) and `post.service.createPost()` (`post.service.js:53`), both directly in the request path. The like-toggle endpoint is the single highest-frequency write in a social app.
+- **Root cause**: A reliability fix (confirm channel) was applied on the synchronous request path. `waitForConfirms()` resolves only after the broker acknowledges — and with `persistent: true` on a durable queue, the broker **fsyncs to disk before acking**. Worse, `waitForConfirms()` waits for **all outstanding confirms on the shared channel**, so concurrent requests' publishes serialize each other's latency.
+- **Impact**: Every like/unlike now pays a RabbitMQ round-trip + broker disk sync (typically +3–20 ms, much worse under broker load or network jitter) *before responding*. This defeats the purpose of the async queue (which exists precisely so the user doesn't wait on the counter write) and caps like throughput at the channel's confirm rate. Under a like storm (viral post), the shared-channel confirm barrier becomes a convoy.
+- **Recommended fix**: Do **not** block the request on confirms. Keep the confirm channel for observability, but in the request path publish fire-and-forget (return `true` when a channel exists) and rely on the existing worker + the existing synchronous fallback for the channel-down case. Attach channel-level `return`/`error` handlers for logging. Counters are eventually-consistent, non-financial data — this matches the system's existing tolerance (the cache already serves stale counts for up to its TTL).
+- **Risk**: **Low–Medium.** Trade strict per-message publish acknowledgment for throughput. Mitigated by: worker idempotency via accumulation, durable queue, DLQ, and the sync fallback. No user-visible correctness change (counts already converge asynchronously).
+- **Expected gains**: Like-toggle p50 latency **−30% to −70%**; removes a throughput ceiling on the hottest endpoint; lower tail latency under concurrency. Response time ↓↓, throughput ↑↑, DB load unchanged, infra cost ↓ (fewer blocked event-loop ticks → fewer instances).
+
+### F2 — [P1] ~338 KB of render-blocking template CSS via raw `<link>` tags
+- **Evidence**: `app/layout.js:22-27` injects four stylesheets into `<head>`: `bootstrap.min.css` (153 KB), `main.css` (140 KB), `common.css` (23 KB), `responsive.css` (22 KB) — all served from `/public/assets/css` outside the Next pipeline.
+- **Root cause**: Stylesheets were dropped into `public/` and linked manually instead of imported through Next, so they are render-blocking, not minified/split/tree-shaken by the framework, not content-hashed, and not served with the framework's immutable long-cache headers.
+- **Impact**: ~338 KB (≈55–70 KB gzipped) of CSS blocks first paint on **every** page. Directly inflates FCP/LCP, especially on the mobile/low-bandwidth networks typical of the target audience.
+- **Recommended fix**: Import the stylesheets through the Next.js CSS pipeline (global import in `app/globals.css` / `layout.js`) so they are minified, hashed, and long-cached; audit Bootstrap usage and drop it if the template's custom CSS already covers the components in use (the app uses a handful of `_feed_*` classes, not the full Bootstrap grid/JS).
+- **Risk**: **Low.** Requires visual parity verification (cascade order must be preserved).
+- **Expected gains**: FCP/LCP **−20% to −40%**; smaller transferred CSS; better cache hit ratio on repeat visits. Response time ↓, bandwidth/CDN egress ↓.
+
+### F3 — [P1] Raw `<img>` everywhere + ~10 MB unused template assets
+- **Evidence**: Only `PostCard.jsx` post image uses `next/image`. Avatars and decorative imagery use raw `<img>` in `FeedContainer`, `CommentSection`, `CommentItem`, `LikeList`, `Navbar`, `LeftSidebar`, `RightSidebar`, `LoginForm`, `RegisterForm`, `CreatePostModal`. `public/assets/images` is **17 MB / 103 files**, including large **unreferenced** PNGs: `top_img.png` (4.5 MB), `group-single.png` (2.9 MB), `profile-cover-img.png` (2.0 MB), `timeline_img.png` (1.2 MB) ≈ **10.6 MB dead weight**; referenced decorative PNGs (`people1-3`, `feed_event1` 293 KB, `recommend1-4` up to 480 KB) are unoptimized.
+- **Root cause**: Template HTML was ported to JSX largely verbatim; images weren't routed through `next/image`, and the template's full image set was copied into `public/` without pruning.
+- **Impact**: Raw `<img>` ships original-resolution PNGs with no AVIF/WebP conversion, no responsive `srcset`, and inconsistent lazy-loading → wasted bandwidth and extra LCP/CLS risk. The 10.6 MB of unused assets bloat the deploy artifact and git repo (no runtime cost unless referenced, but real CI/deploy/storage cost).
+- **Recommended fix**: (a) Delete unreferenced heavy PNGs. (b) Convert referenced avatars/decorative images to `next/image` with explicit dimensions (remote avatar hosts are already whitelisted in `next.config`). (c) Re-export the referenced decorative PNGs as compressed WebP.
+- **Risk**: **Low.** Per-image visual check; confirm no dynamic references to "unused" files first.
+- **Expected gains**: Per-image bytes **−40% to −80%** (AVIF/WebP + right-sizing); deploy artifact ↓ ~10 MB; better LCP and lower CDN egress.
+
+### F4 — [P2] Feed is fully client-rendered; LCP gated on JS + API round-trip
+- **Evidence**: `useFeed.js` fetches the first page in a `useEffect` after hydration; `FeedContainer`/`PostCard` are `'use client'`. Initial HTML is skeletons only.
+- **Root cause**: App Router is used, but the feed page is a client island that fetches its own data post-mount.
+- **Impact**: LCP waits for: HTML → JS bundle → hydration → `fetchFeed` API round-trip → render. On slow networks this is several seconds of skeletons. SEO/shareability of public feed also suffers.
+- **Recommended fix**: Render the first feed page on the server (RSC or server-fetch) and hydrate Redux from it; keep infinite scroll client-side. Requires resolving auth (access token is currently client-held) — a deliberate, scoped change.
+- **Risk**: **Medium.** Touches auth/data-flow boundary; needs care to avoid leaking private posts and to keep the cache user-agnostic.
+- **Expected gains**: LCP/TTI **−30% to −50%** on first load; removes one client round-trip from the critical path.
+
+### F5 — [P2] Duplicate per-request logging
+- **Evidence**: `app.js:56` uses `morgan('combined')` (logs every request) **and** `requestTimer.middleware.js` logs every request again at `info`. Two winston writes per request.
+- **Root cause**: Two overlapping logging mechanisms added independently.
+- **Impact**: 2× log volume and 2× synchronous-ish log I/O per request; meaningful at high RPS and inflates log storage cost.
+- **Recommended fix**: Keep `requestTimer` (it has the latency signal) and drop `morgan`, or gate `requestTimer`'s success log behind the slow threshold only (it already separates SLOW vs normal — log only SLOW at `warn`, sample the rest).
+- **Risk**: **Low.**
+- **Expected gains**: ~50% fewer log lines; lower CPU and log-ingest cost at scale.
+
+### F6 — [P2] Feed read makes two sequential Redis round-trips
+- **Evidence**: `post.service.getFeed` calls `cacheService.getFeedVersion()` (GET) then `cacheService.get(cacheKey)` (GET) — sequential awaits. Same shape in comments (`getCommentVersion` then `get`).
+- **Root cause**: Version and payload are fetched in separate calls.
+- **Impact**: Adds one Redis RTT to every cached feed/comment read. Small per-call, but feed is the most-hit endpoint.
+- **Recommended fix**: Pipeline the two reads (`MGET`/pipeline), or fold the version into the cached payload's validation. Minor, mechanical.
+- **Risk**: **Low.**
+- **Expected gains**: −1 RTT (~0.2–1 ms) on the hottest read; modest throughput headroom.
+
+### F7 — [P3] In-process workers + single-core runtime
+- **Evidence**: `server.js` starts `startLikeWorker()`/`startNotificationWorker()` inside the API process; no clustering/PM2. The like worker does `bulkWrite` batches on the same event loop that serves HTTP.
+- **Root cause**: Simplicity — one process does everything.
+- **Impact**: Worker DB flushes compete with request handling for the single event loop; the app uses one CPU core regardless of host size. Limits per-instance throughput and couples worker load to API latency.
+- **Recommended fix**: (a) Run workers as a separate process/deployment (same image, different entrypoint). (b) Run the API under `cluster`/PM2 with one worker per core behind the existing keep-alive config. Document as infra change.
+- **Risk**: **Medium** (deployment topology change).
+- **Expected gains**: Near-linear throughput scaling with cores; isolates batch-write spikes from request latency.
+
+### F8 — [P3] Minor application-layer costs
+- **`auth.service.issueTokens`** (`:54-62`) issues a token, then `find()`-all-tokens + `deleteMany` on **every** login/register/refresh. Bounded (≤6 docs) but it's 2–3 round-trips per auth; could be a single capped operation. Low priority.
+- **`express-mongo-sanitize`** (`app.js:81`) deep-traverses every request body/query/params on every call. Cheap individually; with `express.json({limit:'10kb'})` the payload is small, so low impact — note only.
+- **`date-fns formatRelative`** recomputed each `PostCard` render (`PostCard.jsx:42`); React 19 compiler is enabled and largely mitigates this. Note only.
+
+---
+
+## 5. ROI Prioritization
+
+| Rank | Finding | Impact | Risk | Effort | ROI |
+|---|---|---|---|---|---|
+| 1 | **F1** Remove `waitForConfirms()` from request path | High (hot-path latency/throughput) | Low–Med | XS | ★★★★★ |
+| 2 | **F2** Move template CSS into Next pipeline (+drop Bootstrap if unused) | High (FCP/LCP) | Low | S | ★★★★★ |
+| 3 | **F3** `next/image` for avatars + delete/compress heavy assets | Med–High (bandwidth/LCP) | Low | S–M | ★★★★ |
+| 4 | **F5** De-duplicate request logging | Med (cost at scale) | Low | XS | ★★★★ |
+| 5 | **F6** Pipeline feed/comment Redis reads | Low–Med | Low | XS | ★★★ |
+| 6 | **F4** Server-render first feed page | Med–High (LCP/TTI) | Med | M–L | ★★★ |
+| 7 | **F7** Separate worker process + clustering | Med (throughput/isolation) | Med | M | ★★★ |
+| 8 | **F8** Auth session-cap & misc micro-opts | Low | Low | XS | ★★ |
+
+**Recommended first batch (high impact / low risk):** F1, F2, F3, F5, F6.
+**Second batch (high impact / medium risk):** F4, F7.
+**Everything else:** F8.
+
+---
+
+## 6. Measurement Plan (before/after)
+
+- **Backend hot paths**: the existing `requestTimer` already records per-request ms. Capture p50/p95 for `POST /api/likes/toggle`, `GET /api/posts` (feed), `POST /api/posts` before and after F1/F6 using a short `autocannon`/`k6` run against the seeded dataset (`scripts/seed.js`: 1k users / 10k posts).
+- **Frontend**: Lighthouse (mobile, throttled) FCP/LCP/TBT and Network panel transfer size for `/feed` and `/login`, before and after F2/F3/F4. Confirm CSS is hashed/minified and images are served as `image/avif`/`image/webp`.
+- **Queue**: confirm like-toggle latency drop and that worker `flushBatch` throughput is unchanged after F1.
+
+> No production traffic numbers were available at audit time; impact ranges above are engineering estimates from request-path analysis and asset sizes, to be confirmed by the measurements above.
+
+---
+
+## 7. Constraints Honored During Future Implementation
+
+- Preserve all existing functionality and response shapes (no breaking API changes).
+- Maintain the existing route→controller→service structure and code conventions.
+- Keep graceful-degradation behavior (Redis/RabbitMQ optional in dev).
+- Add/adjust tests where behavior changes (F1 publish semantics, F5 logging).
+- No premature optimization: F8 items are explicitly deferred.

@@ -58,11 +58,22 @@ const getChannel = () => {
 
 /**
  * Publish a message to the topic exchange.
- * Uses confirm channel — waits for broker ACK before resolving.
- * Silently drops if RabbitMQ is not connected (graceful degradation).
- * Returns true if the message was confirmed, false otherwise.
+ *
+ * The channel is a confirm channel, but we DO NOT await per-message confirmation
+ * in the request path. `waitForConfirms()` blocks until the broker acks (and with
+ * `persistent: true` on a durable queue that includes a disk fsync), and because
+ * it waits on every outstanding publish on the shared channel, concurrent requests
+ * serialize each other's latency. The like-toggle endpoint is the hottest write in
+ * the app, so that round-trip directly inflated its p50/p95 and capped throughput.
+ *
+ * Instead we hand the message to the broker and observe ack/nack asynchronously via
+ * the confirm callback (logged, not awaited). Counters are eventually-consistent and
+ * owned by the worker; the synchronous fallback in the services covers the
+ * channel-down case (when this returns false).
+ *
+ * Returns true if the message was handed to a live channel, false if no channel.
  */
-const publish = async (routingKey, payload) => {
+const publish = (routingKey, payload) => {
   const ch = getChannel();
   if (!ch) {
     logger.warn(`RabbitMQ not available — dropping event: ${routingKey}`);
@@ -71,12 +82,18 @@ const publish = async (routingKey, payload) => {
 
   try {
     const content = Buffer.from(JSON.stringify(payload));
-    // waitForConfirms() resolves when broker confirms all outstanding publishes
-    ch.publish(EXCHANGE_NAME, routingKey, content, {
-      persistent: true,
-      contentType: 'application/json',
-    });
-    await ch.waitForConfirms();
+    // Confirm callback fires on broker ack/nack without blocking the request.
+    ch.publish(
+      EXCHANGE_NAME,
+      routingKey,
+      content,
+      { persistent: true, contentType: 'application/json' },
+      (err) => {
+        if (err) {
+          logger.error(`RabbitMQ publish nacked for ${routingKey}: ${err.message}`);
+        }
+      }
+    );
     return true;
   } catch (err) {
     logger.error(`RabbitMQ publish failed for ${routingKey}: ${err.message}`);

@@ -24,6 +24,11 @@ const refresh = async (req, res, next) => {
     const result = await authService.refresh(req, res);
     sendSuccess(res, 'Token refreshed', result);
   } catch (err) {
+    // Refresh failed (expired/reused/unknown token). Clear the httpOnly refresh
+    // cookie so the browser stops resending a dead token. Without this the client
+    // cannot remove it (httpOnly), and the route middleware keeps treating the user
+    // as authenticated — bouncing /login → /feed → refresh → 401 in an infinite loop.
+    res.clearCookie('refreshToken', { path: '/' });
     next(err);
   }
 };

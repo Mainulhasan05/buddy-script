@@ -107,15 +107,18 @@ const addReply = async ({ commentId, userId, content }) => {
  */
 const getComments = async ({ postId, cursor, limit = 20, userId }) => {
   limit = Math.min(Number(limit), 50);
-  
-  const version = await cacheService.getCommentVersion(postId);
-  const cacheKey = CACHE_KEYS.POST_COMMENTS(postId, version, cursor);
 
-  const cached = await cacheService.get(cacheKey);
-  let result;
-  if (cached) {
-    result = cached; // cacheService.get() already returns a fresh parsed object
-  } else {
+  const dataKey = CACHE_KEYS.POST_COMMENTS_DATA(postId, cursor);
+
+  // One round trip fetches both the comments version and the cached page, then
+  // validates the page was built against the current version.
+  const versioned = await cacheService.getVersioned(
+    CACHE_KEYS.POST_COMMENTS_VERSION(postId),
+    dataKey
+  );
+  let result = versioned.data;
+
+  if (!result) {
     const cursorQuery = buildCursorQuery(cursor);
 
     const comments = await Comment.find({
@@ -134,7 +137,7 @@ const getComments = async ({ postId, cursor, limit = 20, userId }) => {
     const nextCursor = hasMore ? encodeCursor(comments[comments.length - 1]) : null;
 
     result = { comments, pagination: { nextCursor, hasMore } };
-    await cacheService.set(cacheKey, result, CACHE_TTL.COMMENTS);
+    await cacheService.setVersioned(dataKey, versioned.version, result, CACHE_TTL.COMMENTS);
   }
 
   // Batch resolve isLiked — single $in query instead of N+1

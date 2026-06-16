@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useDispatch } from 'react-redux';
 import { commentApi } from '@/src/api/comment.api';
 import LikeButton from './LikeButton';
@@ -97,9 +98,11 @@ export default function CommentItem({ comment }) {
   return (
     <div className="_comment_main" style={{ marginBottom: 16 }}>
       <div className="_comment_image">
-        <img
+        <Image
           src={comment.author.avatarUrl || '/assets/images/txt_img.png'}
           alt={comment.author.firstName}
+          width={40}
+          height={40}
           className="_comment_img1"
         />
       </div>

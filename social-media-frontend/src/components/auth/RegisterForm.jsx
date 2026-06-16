@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authApi } from '@/src/api/auth.api';
+import { clearSessionExpired } from '@/src/api/axiosInstance';
 import { setCredentials } from '@/src/store/slices/authSlice';
 import Button from '@/src/components/ui/Button';
 import { getErrorMessage, normalizeApiError } from '@/src/utils/apiError';
@@ -123,6 +124,7 @@ export default function RegisterForm() {
         email: form.email,
         password: form.password,
       });
+      clearSessionExpired(); // fresh session — re-arm silent refresh
       document.cookie = 'isLoggedIn=true; path=/; max-age=604800; SameSite=Lax';
       dispatch(setCredentials({ user: data.data.user, accessToken: data.data.accessToken }));
       router.push(redirectTo.startsWith('/') ? redirectTo : '/feed');

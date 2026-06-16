@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useDispatch, useSelector } from 'react-redux';
 import { openCreatePostModal } from '@/src/store/slices/uiSlice';
 import { useFeed } from '@/src/hooks/useFeed';
@@ -25,9 +26,11 @@ export default function FeedContainer() {
       <div className="_feed_inner_text_area _b_radious6 _padd_b24 _padd_t24 _padd_r24 _padd_l24 _mar_b16">
         <div className="_feed_inner_text_area_box">
           <div className="_feed_inner_text_area_box_image">
-            <img
+            <Image
               src={user?.avatar?.url || '/assets/images/txt_img.png'}
               alt=""
+              width={44}
+              height={44}
               className="_txt_img"
             />
           </div>

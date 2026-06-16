@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authApi } from '@/src/api/auth.api';
+import { clearSessionExpired } from '@/src/api/axiosInstance';
 import { setAccessToken, setCredentials } from '@/src/store/slices/authSlice';
 
 export default function GoogleCallback() {
@@ -25,6 +26,7 @@ export default function GoogleCallback() {
       }
 
       try {
+        clearSessionExpired(); // fresh session — re-arm silent refresh before getMe
         dispatch(setAccessToken(accessToken));
         const { data } = await authApi.getMe();
         document.cookie = 'isLoggedIn=true; path=/; max-age=604800; SameSite=Lax';

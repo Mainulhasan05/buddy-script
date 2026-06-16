@@ -78,17 +78,19 @@ const getFeed = async ({ cursor, limit = 20, userId }) => {
   // Only cache the first page (no cursor). Deeper pages have low reuse and
   // cursors are unique per position, so caching them wastes Redis memory.
   const isFirstPage = !cursor;
-  let cacheKey = null;
+  const dataKey = CACHE_KEYS.FEED_DATA(null);
+
+  // One round trip fetches both the feed version and the cached payload, then
+  // validates the payload was built against the current version.
+  let result = null;
+  let feedVersion = '0';
   if (isFirstPage) {
-    const feedVersion = await cacheService.getFeedVersion();
-    cacheKey = CACHE_KEYS.FEED(feedVersion, null);
+    const versioned = await cacheService.getVersioned(CACHE_KEYS.FEED_VERSION, dataKey);
+    feedVersion = versioned.version;
+    result = versioned.data;
   }
 
-  const cached = cacheKey ? await cacheService.get(cacheKey) : null;
-  let result;
-  if (cached) {
-    result = cached; // cacheService.get() already returns a fresh parsed object
-  } else {
+  if (!result) {
     const cursorQuery = buildCursorQuery(cursor);
     const posts = await Post.find({
       ...cursorQuery,
@@ -106,8 +108,8 @@ const getFeed = async ({ cursor, limit = 20, userId }) => {
     const nextCursor = hasMore ? encodeCursor(posts[posts.length - 1]) : null;
     result = { posts, pagination: { nextCursor, hasMore } };
 
-    if (cacheKey) {
-      await cacheService.set(cacheKey, result, CACHE_TTL.FEED);
+    if (isFirstPage) {
+      await cacheService.setVersioned(dataKey, feedVersion, result, CACHE_TTL.FEED);
     }
   }
 

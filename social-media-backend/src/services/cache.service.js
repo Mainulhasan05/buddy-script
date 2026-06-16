@@ -38,6 +38,58 @@ const del = async (...keys) => {
 };
 
 /**
+ * Read a version counter and a versioned payload in a SINGLE round trip.
+ *
+ * The payload is stored as { v, data } under a fixed key. We fetch the version
+ * key and the data key together in one pipeline, then validate that the payload's
+ * embedded version matches the current version. A mismatch (or missing payload) is
+ * treated as a miss — this is how O(1) invalidation works without versioned keys.
+ *
+ * Returns { version, data }. `data` is null on miss/stale/error.
+ */
+const getVersioned = async (versionKey, dataKey) => {
+  try {
+    const redis = getRedis();
+
+    let versionRaw = null;
+    let dataRaw = null;
+
+    if (typeof redis.pipeline === 'function') {
+      // Real Redis — one round trip for both GETs
+      const results = await redis.pipeline().get(versionKey).get(dataKey).exec();
+      versionRaw = results?.[0]?.[1] ?? null;
+      dataRaw = results?.[1]?.[1] ?? null;
+    } else {
+      // Noop stub / clients without pipeline — fall back to direct reads
+      versionRaw = await redis.get(versionKey);
+      dataRaw = await redis.get(dataKey);
+    }
+
+    const version = versionRaw || '0';
+    if (!dataRaw) return { version, data: null };
+
+    const parsed = JSON.parse(dataRaw);
+    if (parsed && parsed.v === version) return { version, data: parsed.data };
+    return { version, data: null }; // stale — version was bumped since this was cached
+  } catch (err) {
+    logger.error(`Cache getVersioned error [${versionKey}/${dataKey}]: ${err.message}`);
+    return { version: '0', data: null };
+  }
+};
+
+/**
+ * Store a payload tagged with the version it was built against (TTL in seconds).
+ * Pairs with getVersioned().
+ */
+const setVersioned = async (dataKey, version, data, ttlSeconds) => {
+  try {
+    await getRedis().set(dataKey, JSON.stringify({ v: version, data }), 'EX', ttlSeconds);
+  } catch (err) {
+    logger.error(`Cache setVersioned error [${dataKey}]: ${err.message}`);
+  }
+};
+
+/**
  * Add a member to a Redis Set (used for like state tracking).
  * Optionally sets a TTL on the key (seconds) to prevent unbounded growth.
  */
@@ -160,6 +212,8 @@ module.exports = {
   get,
   set,
   del,
+  getVersioned,
+  setVersioned,
   sAdd,
   sIsMember,
   sRem,

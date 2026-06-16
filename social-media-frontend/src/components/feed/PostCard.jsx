@@ -54,9 +54,11 @@ export default function PostCard({ post }) {
         <div className="_feed_inner_timeline_post_top">
           <div className="_feed_inner_timeline_post_box">
             <div className="_feed_inner_timeline_post_box_image">
-              <img
+              <Image
                 src={post.author.avatarUrl || '/assets/images/post_img.png'}
                 alt={post.author.firstName}
+                width={44}
+                height={44}
                 className="_post_img"
               />
             </div>

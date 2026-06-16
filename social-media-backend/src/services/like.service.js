@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Like = require('../models/Like.model');
 const Post = require('../models/Post.model');
 const Comment = require('../models/Comment.model');
+const User = require('../models/User.model');
 const cacheService = require('./cache.service');
 const { CACHE_KEYS, CACHE_TTL } = require('../constants/cache.constants');
 const logger = require('../utils/logger');
@@ -32,7 +33,11 @@ const toggle = async ({ userId, targetId, targetType }) => {
       await Model.updateOne({ _id: targetId }, { $inc: { likeCount: -1 } });
     }
 
-    await cacheService.sRem(CACHE_KEYS.LIKES(targetType, targetId), userId.toString());
+    // Invalidate caches sequentially
+    await Promise.all([
+      cacheService.del(CACHE_KEYS.LIKES_PAGE(targetType, targetId)),
+      cacheService.set(CACHE_KEYS.USER_LIKE_STATE(userId, targetType, targetId), 'false', CACHE_TTL.USER_LIKE_STATE),
+    ]);
 
     return { isLiked: false, delta: -1 };
   }
@@ -43,6 +48,7 @@ const toggle = async ({ userId, targetId, targetType }) => {
   } catch (err) {
     // Duplicate key error (11000) — user already liked (race condition handled gracefully)
     if (err.code === 11000) {
+      await cacheService.set(CACHE_KEYS.USER_LIKE_STATE(userId, targetType, targetId), 'true', CACHE_TTL.USER_LIKE_STATE);
       return { isLiked: true, delta: 0 };
     }
     throw err;
@@ -61,97 +67,123 @@ const toggle = async ({ userId, targetId, targetType }) => {
     await Model.updateOne({ _id: targetId }, { $inc: { likeCount: 1 } });
   }
 
-  await cacheService.sAdd(CACHE_KEYS.LIKES(targetType, targetId), userId.toString(), CACHE_TTL.LIKES);
+  // Invalidate list page cache and set state cache to true
+  await Promise.all([
+    cacheService.del(CACHE_KEYS.LIKES_PAGE(targetType, targetId)),
+    cacheService.set(CACHE_KEYS.USER_LIKE_STATE(userId, targetType, targetId), 'true', CACHE_TTL.USER_LIKE_STATE),
+  ]);
 
   return { isLiked: true, delta: 1 };
 };
 
 /**
  * Get paginated list of users who liked a target.
- * Uses $lookup to join user info — acceptable here since "Who Liked" is not a hot path.
+ * Replaced $lookup aggregate with Application-Level Hydration to prevent database locks.
+ * Caches first page of likes for high-volume engagement.
  */
 const getLikers = async ({ targetId, targetType, cursor, limit = 20 }) => {
   limit = Math.min(Number(limit), 50);
 
-  const matchStage = { targetId: new mongoose.Types.ObjectId(targetId), targetType };
+  const isFirstPage = !cursor;
+  let cacheKey = null;
+
+  if (isFirstPage) {
+    cacheKey = CACHE_KEYS.LIKES_PAGE(targetType, targetId);
+    const cached = await cacheService.get(cacheKey);
+    if (cached) return cached;
+  }
+
+  const query = { targetId: new mongoose.Types.ObjectId(targetId), targetType };
   if (cursor) {
     try {
       const decoded = Buffer.from(cursor, 'base64').toString('utf8');
       const { createdAt } = JSON.parse(decoded);
-      matchStage.createdAt = { $lt: new Date(createdAt) };
+      query.createdAt = { $lt: new Date(createdAt) };
     } catch {
       // Invalid cursor — ignore and start from beginning
     }
   }
 
-  const likers = await Like.aggregate([
-    { $match: matchStage },
-    { $sort: { createdAt: -1 } },
-    { $limit: limit + 1 },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'userId',
-        foreignField: '_id',
-        as: 'user',
-      },
-    },
-    { $unwind: '$user' },
-    {
-      $project: {
-        _id: 0,
-        createdAt: 1,
-        user: {
-          _id: '$user._id',
-          firstName: '$user.firstName',
-          lastName: '$user.lastName',
-          avatarUrl: '$user.avatar.url',
-        },
-      },
-    },
-  ]);
+  // Step 1: Query raw likes (select only userId and createdAt)
+  const rawLikes = await Like.find(query)
+    .select('userId createdAt')
+    .sort({ createdAt: -1 })
+    .limit(limit + 1)
+    .lean();
 
-  const hasMore = likers.length > limit;
-  if (hasMore) likers.pop();
+  const hasMore = rawLikes.length > limit;
+  if (hasMore) rawLikes.pop();
 
-  const last = likers[likers.length - 1];
+  let likers = [];
+  if (rawLikes.length > 0) {
+    // Step 2: Extract unique userIds
+    const userIds = rawLikes.map((l) => l.userId);
+
+    // Step 3: Query profile snapshots in a single bulk $in lookup
+    const users = await User.find({ _id: { $in: userIds } })
+      .select('_id firstName lastName avatar.url')
+      .lean();
+
+    // Map profiles back to reaction records
+    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+    likers = rawLikes
+      .map((l) => {
+        const user = userMap.get(l.userId.toString());
+        if (!user) return null;
+        return {
+          createdAt: l.createdAt,
+          user: {
+            _id: user._id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            avatarUrl: user.avatar?.url || null,
+          },
+        };
+      })
+      .filter(Boolean);
+  }
+
+  const last = rawLikes[rawLikes.length - 1];
   const nextCursor =
     hasMore && last
       ? Buffer.from(JSON.stringify({ createdAt: last.createdAt })).toString('base64')
       : null;
 
-  return { likers, pagination: { nextCursor, hasMore } };
+  const result = { likers, pagination: { nextCursor, hasMore } };
+
+  // Cache first page only if results exist
+  if (cacheKey && result.likers.length > 0) {
+    await cacheService.set(cacheKey, result, CACHE_TTL.LIKES_PAGE);
+  }
+
+  return result;
 };
 
 /**
  * Check if a user has liked a target (single item — used for individual post views).
- * Redis SISMEMBER first — DB fallback on cache miss.
+ * Checks a localized session key first, falling back to a quick MongoDB exists query.
  */
 const getLikeState = async ({ userId, targetId, targetType }) => {
-  const cacheKey = CACHE_KEYS.LIKES(targetType, targetId);
+  const cacheKey = CACHE_KEYS.USER_LIKE_STATE(userId, targetType, targetId);
 
-  // Check Redis set first
-  const inCache = await cacheService.sIsMember(cacheKey, userId.toString());
-  if (inCache) return true;
+  // Check Redis session state first
+  const cachedVal = await cacheService.get(cacheKey);
+  if (cachedVal === 'true') return true;
+  if (cachedVal === 'false') return false;
 
-  // Cache miss — check DB
+  // Cache miss — check DB via compound unique index
   const exists = await Like.exists({ userId, targetId, targetType });
-  if (exists) {
-    // Back-populate Redis for future checks
-    await cacheService.sAdd(cacheKey, userId.toString(), CACHE_TTL.LIKES);
-    return true;
-  }
+  const existsStr = exists ? 'true' : 'false';
 
-  return false;
+  // Back-populate session cache
+  await cacheService.set(cacheKey, existsStr, CACHE_TTL.USER_LIKE_STATE);
+
+  return !!exists;
 };
 
 /**
  * Batch check if a user has liked multiple targets — eliminates N+1 queries.
  * Returns a Set of targetId strings that the user has liked.
- *
- * Usage:
- *   const likedSet = await getBatchLikeState({ userId, targetIds: postIds, targetType: 'post' });
- *   posts.forEach(p => p.isLiked = likedSet.has(p._id.toString()));
  */
 const getBatchLikeState = async ({ userId, targetIds, targetType }) => {
   if (!userId || !targetIds.length) return new Set();

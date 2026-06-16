@@ -1,3 +1,11 @@
+// Template stylesheets — imported through the Next.js CSS pipeline so they are
+// minified, content-hashed, bundled, and served with immutable long-cache headers
+// instead of four render-blocking <link> tags. Order matters: base/vendor first,
+// then globals.css last so its overrides win.
+import '@/styles/vendor/bootstrap.min.css';
+import '@/styles/vendor/common.css';
+import '@/styles/vendor/main.css';
+import '@/styles/vendor/responsive.css';
 import './globals.css';
 import { Poppins } from 'next/font/google';
 import ReduxProvider from '@/src/components/layout/ReduxProvider';
@@ -18,13 +26,6 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={poppins.variable}>
-      <head>
-        {/* Template CSS files — order matters */}
-        <link rel="stylesheet" href="/assets/css/bootstrap.min.css" />
-        <link rel="stylesheet" href="/assets/css/common.css" />
-        <link rel="stylesheet" href="/assets/css/main.css" />
-        <link rel="stylesheet" href="/assets/css/responsive.css" />
-      </head>
       <body className={poppins.className}>
         <ReduxProvider>
           {children}

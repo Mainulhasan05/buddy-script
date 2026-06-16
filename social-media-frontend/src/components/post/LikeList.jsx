@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useDispatch, useSelector } from 'react-redux';
 import { closeLikeListModal, showToast } from '@/src/store/slices/uiSlice';
 import { likeApi } from '@/src/api/like.api';
@@ -8,6 +9,8 @@ import Button from '@/src/components/ui/Button';
 import EmptyState from '@/src/components/ui/EmptyState';
 import RetryState from '@/src/components/ui/RetryState';
 import { getErrorMessage } from '@/src/utils/apiError';
+
+const MAX_LOCAL_LIKERS = 100; // Client memory safety guard
 
 export default function LikeList() {
   const dispatch = useDispatch();
@@ -32,7 +35,11 @@ export default function LikeList() {
     setError('');
     try {
       const { data } = await likeApi.getLikers(targetType, targetId, cursor);
-      setLikers((prev) => (cursor ? [...prev, ...data.data] : data.data));
+      setLikers((prev) => {
+        const combined = cursor ? [...prev, ...data.data] : data.data;
+        // Cap the list length to protect client DOM rendering performance
+        return combined.slice(0, MAX_LOCAL_LIKERS);
+      });
       setNextCursor(data.pagination?.nextCursor ?? null);
       setHasMore(data.pagination?.hasMore ?? false);
     } catch (err) {
@@ -83,16 +90,18 @@ export default function LikeList() {
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {likers.map((item, i) => (
                 <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
-                  <img
+                  <Image
                     src={item.user.avatarUrl || '/assets/images/profile.png'}
                     alt={item.user.firstName}
+                    width={36}
+                    height={36}
                     style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }}
                   />
                   <span>{item.user.firstName} {item.user.lastName}</span>
                 </li>
               ))}
             </ul>
-            {hasMore && (
+            {hasMore && likers.length < MAX_LOCAL_LIKERS && (
               <Button
                 type="button"
                 onClick={() => fetchLikers(nextCursor)}

@@ -1,5 +1,5 @@
-/* Template CSS is loaded via <link> tags in layout.js */
-/* This file handles any global overrides needed for Next.js compatibility */
+/* Template CSS (styles/vendor/*) is imported through the Next.js pipeline in layout.js,
+   before this file, so the overrides below take precedence. */
 
 /* Skeleton animation (used by PostSkeleton) */
 @keyframes _skeleton_pulse_anim {
