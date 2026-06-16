@@ -8,13 +8,20 @@ export default function InfiniteScrollTrigger({ onVisible, hasMore, loading }) {
   useEffect(() => {
     if (!hasMore || loading) return;
 
+    // The main scroll container is ._layout_middle_wrap, not the viewport.
+    // Specifying it as root is required since ._main_layout has overflow: hidden.
+    const scrollContainer = document.querySelector('._layout_middle_wrap');
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
           onVisible();
         }
       },
-      { rootMargin: '200px' }
+      { 
+        root: scrollContainer || null,
+        rootMargin: '200px' 
+      }
     );
 
     const el = ref.current;
@@ -28,6 +35,6 @@ export default function InfiniteScrollTrigger({ onVisible, hasMore, loading }) {
   if (!hasMore) return null;
 
   return (
-    <div ref={ref} style={{ height: '1px' }} aria-hidden="true" />
+    <div ref={ref} style={{ height: '10px', margin: '10px 0' }} aria-hidden="true" />
   );
 }

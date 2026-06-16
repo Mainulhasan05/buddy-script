@@ -16,7 +16,11 @@ export default function PostActions({ post }) {
       <div className="_feed_inner_timeline_total_reacts _padd_r24 _padd_l24 _mar_b26">
         <div className="_feed_inner_timeline_total_reacts_image">
           {post.likeCount > 0 && (
-            <p className="_feed_inner_timeline_total_reacts_para">{post.likeCount}</p>
+            <p className="_feed_inner_timeline_total_reacts_para" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="#fff" viewBox="0 0 24 24">
+                <path d="M4 21h1v-8H4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2zM20 14a2 2 0 0 0-2-2h-3.13l.95-4.57.03-.32a1 1 0 0 0-.29-.7L14.83 5.3 8.41 11.72A1.98 1.98 0 0 0 8 13.14V19a2 2 0 0 0 2 2h6.24a2 2 0 0 0 1.79-1.11L21 14.88a2 2 0 0 0 .1-.56V14z"/>
+              </svg>
+            </p>
           )}
         </div>
         <div className="_feed_inner_timeline_total_reacts_txt">

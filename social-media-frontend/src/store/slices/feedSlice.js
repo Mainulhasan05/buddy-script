@@ -8,7 +8,7 @@ import { getErrorMessage } from '@/src/utils/apiError';
 // Cap retained posts to prevent unbounded memory growth during long scroll sessions.
 // 200 posts ≈ 10 pages of 20 — keeps enough content for smooth back-scrolling
 // while preventing browser memory pressure during extended sessions.
-const MAX_RETAINED_POSTS = 200;
+const MAX_RETAINED_POSTS = 100;
 
 // ─── Async Thunks ────────────────────────────────────────────────────────────
 
